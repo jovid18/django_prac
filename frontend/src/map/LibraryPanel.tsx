@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query'
 
 import { fetchLibraryDetail } from '../api/libraries'
+import { FavoriteButton } from '../favorites/FavoriteButton'
 import type { LibraryListItem } from '../types/api'
 import styles from './LibraryPanel.module.css'
 import { SMOKING_META } from './smoking'
@@ -59,6 +60,13 @@ export function LibraryPanel({ item, onClose }: Props) {
       </dl>
 
       {isError && <p className={styles.error}>詳細を取得できませんでした。</p>}
+
+      {/* ★ 星の状態は詳細（`is_favorited`）が持っている。届く前は
+          `undefined` を渡して押せない状態にする。楽観的に「☆」を出すと、
+          既に登録済みの館で一瞬「未登録」に見えてから切り替わる。 */}
+      <div className={styles.favorite}>
+        <FavoriteButton libraryId={item.id} isFavorited={data?.is_favorited} />
+      </div>
 
       {/* 座標の出所を残す習慣（docs/04-data-model.md）。元プロジェクトでの
           「Google Maps 由来座標の取り扱い」に対応する練習。 */}

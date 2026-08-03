@@ -148,6 +148,11 @@ export function apiPost<T>(
   return request<T>(path, { method: 'POST', json, skipRefresh: options.skipRefresh })
 }
 
+/** 204 が返るので戻り値は無い（`request` が 204 を undefined に畳んでいる）。 */
+export function apiDelete(path: string): Promise<void> {
+  return request<void>(path, { method: 'DELETE' })
+}
+
 /**
  * DRF のエラー本文を 1 行のメッセージにする。
  *

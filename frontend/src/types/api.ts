@@ -39,6 +39,24 @@ export type LibraryDetail = LibraryListItem & {
   updated_at: string
 }
 
+/**
+ * お気に入り一覧の 1 件。
+ *
+ * ★ `{library: {...}, created_at}` のようなネストではなく、
+ *   **地図の一覧と同じ形に `address` / `favorited_at` を足した形**で返る
+ *   （backend の `FavoriteListSerializer`）。詳細パネルなど
+ *   `LibraryListItem` を受け取る側にそのまま渡せる。
+ */
+export type FavoriteItem = LibraryListItem & {
+  address: string
+  favorited_at: string
+}
+
+export type FavoriteListResponse = {
+  count: number
+  results: FavoriteItem[]
+}
+
 /** 地図の表示範囲。API には `min_lng,min_lat,max_lng,max_lat` の順で渡す。 */
 export type Bbox = {
   west: number

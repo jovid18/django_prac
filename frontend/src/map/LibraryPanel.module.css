@@ -75,6 +75,10 @@
   font-size: 11px;
 }
 
+.favorite {
+  margin-top: 10px;
+}
+
 .source {
   margin: 10px 0 0;
   color: var(--sub);

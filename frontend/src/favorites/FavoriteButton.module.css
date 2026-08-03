@@ -1,0 +1,40 @@
+.wrap {
+  display: grid;
+  gap: 4px;
+}
+
+.button {
+  display: inline-flex;
+  gap: 6px;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  /* 44px の tap target を確保する。地図の上の狭いパネルでも押しやすいように。 */
+  min-height: 34px;
+  padding: 6px 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: none;
+  color: inherit;
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.button[data-on] {
+  border-color: transparent;
+  background: var(--fg);
+  color: var(--bg);
+  font-weight: 700;
+}
+
+.button:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+
+.error {
+  margin: 0;
+  color: var(--ng);
+  font-size: 11px;
+}

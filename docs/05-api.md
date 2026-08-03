@@ -56,10 +56,10 @@ DRF のデフォルトに乗せつつ、形を 1 つに統一する。
 | `GET` | `/api/auth/me/` | 必要 | 自分の情報 |
 | `GET` | `/api/libraries/` | 不要 | 図書館の一覧・検索（bbox / フィルタ） |
 | `GET` | `/api/libraries/{id}/` | 不要 | 図書館の詳細 |
-| `GET` | `/api/libraries/nearby/` | 不要 | 現在地から近い順（Should） |
-| `POST` | `/api/libraries/{id}/favorite/` | 必要 | お気に入り登録（Should） |
-| `DELETE` | `/api/libraries/{id}/favorite/` | 必要 | お気に入り解除（Should） |
-| `GET` | `/api/favorites/` | 必要 | お気に入り一覧（Should） |
+| `GET` | `/api/libraries/nearby/` | 不要 | 現在地から近い順（Should・未実装） |
+| `POST` | `/api/libraries/{id}/favorite/` | 必要 | お気に入り登録 |
+| `DELETE` | `/api/libraries/{id}/favorite/` | 必要 | お気に入り解除 |
+| `GET` | `/api/favorites/` | 必要 | お気に入り一覧 |
 
 > **一覧・詳細は未ログインでも見られる。** 地図を開いた瞬間にログインを求める設計にしない。書き込み（お気に入り）だけログインを要求する。
 
@@ -257,11 +257,58 @@ GET /api/libraries/?bbox=139.68,35.66,139.78,35.72&smoking=both,heated_only
 
 - `lat` / `lng` が無ければ `400`。**現在地が取れないときにフロントがこれを呼ばない**のが前提（`07-frontend.md`）。
 
-### `POST` / `DELETE /api/libraries/{id}/favorite/`（Should）
+### `POST` / `DELETE /api/libraries/{id}/favorite/`
 
-- `POST` → `201`（既に登録済みでも `201` を返して冪等にする）
-- `DELETE` → `204`（未登録でも `204`）
-- 未ログインなら `401`
+```jsonc
+// POST → 201（既に登録済みでも 201）
+{ "is_favorited": true }
+// DELETE → 204（本文なし。未登録でも 204）
+```
+
+- **どちらも冪等。** 二重 POST に `409`、未登録の DELETE に `404` を返すと、
+  フロントが押す前に「登録済みか」を問い合わせる作りになる。ボタン連打や
+  オフライン復帰後の再送で、結果の状態が同じであればよい。
+- 未ログインなら `401`。**存在しない id でも `401`**（権限チェックが先）。
+  逆にすると「どの id が存在するか」を未ログインで総当たりできる。
+- 存在しない id + ログイン済みなら `404`。
+- 閲覧系（一覧・詳細）は `AllowAny` のままで、**このアクションだけ
+  `permission_classes` を上書き**している。ViewSet 全体を `IsAuthenticated`
+  にすると地図がログイン必須になる。
+
+### `GET /api/favorites/`
+
+```jsonc
+// 200
+{
+  "count": 1,
+  "results": [
+    {
+      "id": 3,
+      "name": "新宿区立中央図書館",
+      "ward": "新宿区",
+      "latitude": "35.xxxxxx",
+      "longitude": "139.xxxxxx",
+      "smoking_status": "both",
+      "smoking_status_label": "両方可",
+      "address": "（住所）",
+      "favorited_at": "2026-08-03T21:47:49.510365+09:00"
+    }
+  ]
+}
+```
+
+**設計上の決めごと**
+
+- **`Favorite` をネストしない。** `{"library": {...}, "created_at": ...}` ではなく
+  **一覧の 1 件に `address` と `favorited_at` を足した形**で返す。フロントが地図の
+  一覧（`LibraryListItem`）と同じ型で扱えるようにするため。
+- **`address` を含める。** この画面には地図が無く、名前だけでは場所が分からない。
+  地図の一覧では逆に「描画に要らないので返さない」——**同じ項目でも画面によって
+  判断が変わる**例。
+- 登録が新しい順。同時刻でも順序が揺れないよう `id` を第 2 キーに入れてある。
+- `bbox` で切らないので **`truncated` は無い**。
+- ルータの外に `path()` で 1 本置いている。`ViewSet` にすると使わない
+  detail / update / destroy まで公開されてしまう。
 
 ---
 
@@ -303,4 +350,10 @@ urlpatterns = [
 | me | 未認証で `401` |
 | libraries 一覧 | bbox で絞れること / `smoking` フィルタ / `bbox` 不正で `400` / `truncated` |
 | libraries 詳細 | 存在しない id で `404` |
-| favorite | 未ログインで `401` / 二重 POST が冪等 |
+| favorite | 未ログインで `401` / 二重 POST が冪等 / 未登録の DELETE が `204` / 他人の行を消さない |
+| favorites 一覧 | 未ログインで `401` / **自分の行だけ**返る / 新しい順 / `address` と `favorited_at` が入る |
+
+> **お気に入りのテストは JWT を直接発行する**（`RefreshToken.for_user`）。
+> `client.force_login` は使えない（API に SessionAuthentication を入れていない）し、
+> ログイン API 経由にすると `login` スロットリング（5/min）に引っかかる。
+> 実装は `apps/libraries/tests/conftest.py` の `bearer` フィクスチャ。
