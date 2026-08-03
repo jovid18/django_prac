@@ -3,6 +3,7 @@ import type {
   FavoriteListResponse,
   LibraryDetail,
   LibraryListResponse,
+  NearbyListResponse,
   SmokingStatus,
 } from '../types/api'
 import { apiDelete, apiGet, apiPost } from './client'
@@ -43,6 +44,28 @@ export function searchLibraries(args: {
 }): Promise<LibraryListResponse> {
   return apiGet<LibraryListResponse>('/api/libraries/', {
     q: args.q,
+    smoking: args.smoking.join(','),
+    limit: args.limit,
+  })
+}
+
+/**
+ * 現在地から近い順。
+ *
+ * ⚠ `lat` / `lng` が無いと API は 400 を返す。**現在地が取れないときは
+ *   ここを呼ばない**のがフロント側の責任（docs/07-frontend.md）。
+ */
+export function fetchNearby(args: {
+  lat: number
+  lng: number
+  radiusM: number
+  smoking: SmokingStatus[]
+  limit: number
+}): Promise<NearbyListResponse> {
+  return apiGet<NearbyListResponse>('/api/libraries/nearby/', {
+    lat: args.lat,
+    lng: args.lng,
+    radius_m: args.radiusM,
     smoking: args.smoking.join(','),
     limit: args.limit,
   })

@@ -59,6 +59,20 @@ class LibraryDetailSerializer(serializers.ModelSerializer):
         return obj.favorites.filter(user=user).exists()
 
 
+class NearbyLibrarySerializer(LibraryListSerializer):
+    """`nearby` の 1 件。一覧の項目に `distance_m` が付く（docs/05-api.md）。"""
+
+    distance_m = serializers.SerializerMethodField()
+
+    class Meta(LibraryListSerializer.Meta):
+        fields = [*LibraryListSerializer.Meta.fields, "distance_m"]
+
+    def get_distance_m(self, obj) -> int:
+        # ビューの annotate が入れた float をメートル単位の整数に丸める。
+        # 球面近似の誤差が 0.5% 程度あるので、小数を返しても意味が無い。
+        return round(obj.distance_m)
+
+
 class FavoriteListSerializer(LibraryListSerializer):
     """お気に入り一覧の 1 件。
 

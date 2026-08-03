@@ -2,17 +2,19 @@ import { AdvancedMarker, useMap } from '@vis.gl/react-google-maps'
 import { useEffect } from 'react'
 
 import styles from './LocateControl.module.css'
-import { useGeolocation } from './useGeolocation'
+import type { Geolocation } from './useGeolocation'
 
 /**
  * 現在地ボタン。
  *
  * 起動と同時に権限を求めない。地図が見えている状態で押させるほうが許可率が高く、
  * **拒否されても地図と検索は全部動く**（docs/07-frontend.md）。
+ *
+ * ★ 状態は自分で持たず `MapPage` から受け取る。「近い順」も同じ現在地を使うので、
+ *   それぞれがフックを呼ぶと許可を 2 回求めることになる。
  */
-export function LocateControl() {
+export function LocateControl({ geo: { state, request } }: { geo: Geolocation }) {
   const map = useMap()
-  const { state, request } = useGeolocation()
 
   useEffect(() => {
     if (state.status !== 'granted' || !map) return
