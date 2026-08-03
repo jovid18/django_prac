@@ -23,6 +23,18 @@ CSRF_TRUSTED_ORIGINS = [FRONTEND_ORIGIN]
 SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
 SECURE_SSL_REDIRECT = True
 
+# ★ ヘルスチェックのパスだけ HTTPS リダイレクトから除外する。
+#
+# Render の内部ヘルスチェックは X-Forwarded-Proto を付けずにコンテナを直接叩く
+# ことがある。すると Django は「HTTP で来た」と判断して 301 を返し、Render は
+# 2xx でないためチェック失敗と見なしてインスタンスをルーティングから外す。
+# 次の試行では通るので、また投入される —— これを繰り返して
+# 「プロセスは生きているのにリクエストの半分が x-render-routing: no-server で
+# 404 になる」という症状が出る。
+#
+# 正規表現の先頭にスラッシュは付けない（Django が lstrip("/") した後の値と照合するため）。
+SECURE_REDIRECT_EXEMPT = [r"^api/health/$"]
+
 SESSION_COOKIE_SECURE = True
 CSRF_COOKIE_SECURE = True
 SECURE_HSTS_SECONDS = 3600
