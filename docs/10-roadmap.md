@@ -218,14 +218,22 @@
       - `refresh` は StrictMode でも **1 回だけ**飛ぶ
       - **未ログインでも地図・一覧・詳細が見られる**ことを Cookie 無しの独立コンテキストで確認
 - [x] テスト 71 件（うち accounts 33 件）
-- [ ] **本番でリロードしてもログインが維持されるか確認** ← マージ後の宿題
-      → ⚠ フロントと API は `*.onrender.com` の別サブドメインで、**別サイト扱い**
+- [x] **本番でリロードしてもログインが維持されることを確認**（Chrome。PR #7 マージ後に実測）
+      - `Set-Cookie` は `SameSite=None; Secure; HttpOnly; Path=/api/auth` で正しく出ている
+      - 登録 → **F5 → ログイン状態のまま**（`refresh` 200 → `me` 200）
+      - ⚠ フロントと API は `*.onrender.com` の別サブドメインで、**別サイト扱い**になる
         （`onrender.com` は Public Suffix List に載っている）。リフレッシュ Cookie は
-        third-party cookie になるので、**Safari やサードパーティ Cookie ブロック下では維持されない**。
-        Chrome で確認する。根本回避は独自ドメイン（`06-auth.md`）
-- [ ] **本番で Google ログインを確認** ← マージ後の宿題
-      → サーバ側は `verify_oauth2_token` を差し替えてテストしてあるが、
-        **実際の Google アカウントでのログインは未実施**（ローカルでもまだ）
+        third-party cookie なので、**Safari やサードパーティ Cookie ブロック下では
+        維持されない見込み（未検証）。** 根本回避は独自ドメインしかないので受け入れる（`06-auth.md`）
+- [ ] **本番で Google ログインを確認** — 手前まで確認済み。**残りは実アカウントでのサインインだけ**
+      - [x] クライアント ID がビルドに埋まっている（ボタンが描画される）
+      - [x] **`[GSI_LOGGER]: The given origin is not allowed for the given client ID` が出ない**
+            = 承認済み JavaScript 生成元に本番 URL が登録できている。
+            これが「本番だけ Google ログインが動かない」の最頻出原因なので、ここを先に潰した
+      - [x] ボタンのラベルが日本語（`?hl=ja` が本番でも効いている）
+      - [x] API 側の `GOOGLE_OAUTH_CLIENT_ID` 設定済み（不正トークンで **401**。
+            未設定なら 503 を返す実装なので、これで切り分けられる）
+      - [ ] 実際の Google アカウントでサインインして 200 / 201 が返ること ← **要手作業**
 
 ## Day 5 — 仕上げと Should
 

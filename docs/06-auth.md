@@ -264,6 +264,28 @@ async function request(path: string, init: RequestInit = {}) {
 今回は独自ドメインを使わないので、**この制限を受け入れる**。
 `docs/10-roadmap.md` の動作確認シナリオは Chrome で通す前提。
 
+> **Chrome では実測で通った**（PR #7 マージ後）。`Set-Cookie` は
+> `SameSite=None; Secure; HttpOnly; Path=/api/auth` で出ており、登録 → F5 で
+> `refresh` 200 → `me` 200、ログイン状態が維持される。**Safari は未検証。**
+
+### 「本番だけ Google ログインが動かない」の切り分け順
+
+原因が 3 か所に分かれるので、**上から順に潰すと速い**。
+
+| 見えるもの | 原因 | 直す場所 |
+|---|---|---|
+| ボタンが描画されない | `VITE_GOOGLE_OAUTH_CLIENT_ID` がビルド時に入っていない（フロントの環境変数は**ビルド時に埋まる**） | Render の Static Site の環境変数 → **再ビルド** |
+| Console に `[GSI_LOGGER]: The given origin is not allowed for the given client ID` | 承認済み JavaScript 生成元に本番 URL が無い（**最頻出**） | Google Cloud Console |
+| ボタンは動くが API が **503** | サーバの `GOOGLE_OAUTH_CLIENT_ID` が空。`aud` を検証できないので**わざと止めている** | Render の Web Service の環境変数 |
+| API が **401** | ここまでは正常。トークン側の問題（期限切れ・`aud` 不一致・未確認メール） | — |
+
+**不正なトークンを 1 回投げて 401 か 503 かを見るだけで、サーバ側の設定切り分けが終わる。**
+
+```bash
+curl -sS -X POST https://<api>/api/auth/google/ \
+  -H 'Content-Type: application/json' -d '{"id_token":"invalid"}' -w '\n%{http_code}\n'
+```
+
 ### テストで気をつけたこと
 
 - **DRF のスロットリングは cache にカウントを持つ。** cache はテスト間で共有されるので、
