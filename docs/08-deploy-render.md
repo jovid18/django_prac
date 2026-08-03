@@ -246,6 +246,7 @@ LOGGING = { ... }   # console ハンドラに INFO 以上
 
 | 症状 | 原因 |
 |---|---|
+| **リクエストの半分くらいが 404 になる**（ログにはエラーが出ていない） | **ヘルスチェックと `SECURE_SSL_REDIRECT` の衝突。** 下記 |
 | `DisallowedHost at /` | `DJANGO_ALLOWED_HOSTS` 未設定 or ホスト名が違う |
 | ブラウザ Console に `blocked by CORS policy` | `FRONTEND_ORIGIN` の値が違う（末尾スラッシュが余計、`http`/`https` の取り違え） |
 | リダイレクトが多すぎる | `SECURE_PROXY_SSL_HEADER` の設定漏れ |
@@ -256,6 +257,60 @@ LOGGING = { ... }   # console ハンドラに INFO 以上
 | 起動時に `relation does not exist` | `migrate` が走っていない（`dockerCommand` を確認） |
 | デプロイは成功するのに反映されない | フロントの環境変数を変えただけで再ビルドしていない |
 | 突然 DB に繋がらなくなった | **無料 Postgres の有効期限切れ** |
+
+## ★ 実際に踏んだ罠: ヘルスチェックと HTTPS リダイレクトの衝突
+
+**症状**: デプロイは成功し、ログもクリーン（クラッシュもヘルスチェック失敗の記録もない）。
+なのに**外から叩くとリクエストの約半分が 404** になる。
+
+```
+$ for i in 1..15; curl -o /dev/null -w "%{http_code}" .../api/health/
+X...XXXXX.XXXXX      成功 4 / 失敗 11
+```
+
+**切り分けの決め手は `x-render-origin-server` ヘッダ。**
+
+| ヘッダ | 意味 |
+|---|---|
+| `x-render-origin-server: gunicorn` | アプリまで届いている。**レスポンスは正しい** |
+| `x-render-routing: no-server` | Render のエッジが**生きているインスタンスを見つけられなかった** |
+
+この 2 つがリクエストごとにランダムに入れ替わる。**プロセスは動いているのに、
+インスタンスがルーティングから出たり入ったりしている**状態。
+
+**原因**
+
+```
+Render の内部ヘルスチェックが X-Forwarded-Proto を付けずにコンテナを叩く
+  → Django は「HTTP で来た」と判断し SECURE_SSL_REDIRECT で 301 を返す
+  → Render は 2xx でないため失敗と見なしインスタンスをルーティングから外す
+  → 次の試行では通るのでまた投入される
+  → 以降フラッピング
+```
+
+**アプリケーションログには何も出ない。** ヘルスチェックはアプリのログではなく
+プラットフォーム側の判定なので、`django.request` のログにも現れない。
+
+**対処**
+
+```python
+# production.py
+SECURE_REDIRECT_EXEMPT = [r"^api/health/$"]
+```
+
+先頭にスラッシュを付けないこと。Django は `path.lstrip("/")` した後の値と照合する。
+
+**確認方法**（ローカルで再現できる）
+
+```python
+# X-Forwarded-Proto を付けずに叩く = 内部ヘルスチェックの再現
+c.get("/api/health/")   # 修正前 301 → 修正後 200
+c.get("/admin/")        # 301 のまま（意図通り）
+```
+
+> **教訓**: 「デプロイ成功 + ログがクリーン」でも壊れていることがある。
+> **外形監視（実際に URL を叩く）を必ずやる**こと。デプロイ後チェックリストが
+> 単なる儀式ではないのはこのため。
 
 ## 独自ドメインについて
 

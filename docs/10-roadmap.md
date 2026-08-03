@@ -53,20 +53,32 @@
 - [x] `.env.example` を書く / `.env` に Google クライアント ID を投入
 - [x] `.gitignore` を確認（`.env`、`*.sqlite3`、`staticfiles/` を追加）
 
-### デプロイ ← ★ ここから
+### デプロイ
 
 - [x] `render.yaml` を書く
-- [ ] Blueprint でデプロイ
-- [ ] **`08-deploy-render.md` の初回デプロイ手順 4〜8 を実施**（URL 確定後の環境変数入力）
-- [ ] 本番 URL でフロントが API の health を叩けることを確認 ← **ここが Day 1 のゴール**
-- [ ] Google Cloud に本番の生成元を追加する（Day 0 の宿題を回収）
+- [x] Blueprint でデプロイ（`plan` と `region` の指定ミスを 2 件修正）
+- [x] URL 確定後の環境変数入力
+- [x] **ヘルスチェックのフラッピングを修正**（`SECURE_REDIRECT_EXEMPT`。`08-deploy-render.md`）
+- [x] **本番 URL でフロントが API の health を叩ける** ← **Day 1 のゴール達成**
+- [x] Google Cloud に本番の生成元を追加（Day 0 の宿題を回収）
+
+**外形確認の結果**
+
+| 項目 | 結果 |
+|---|---|
+| API の安定性 | 15/15（修正前は 4/15） |
+| CORS 許可オリジン | `access-control-allow-origin` + credentials |
+| CORS プリフライト | methods / headers 正常 |
+| CORS 未許可オリジン | 許可ヘッダなし = 遮断 |
+| フロントのビルド時注入 | API URL・クライアント ID ともに反映 |
+| `debug` | `false`（production 設定のロード確認） |
 
 ### CI
 
 - [x] `.github/workflows/ci.yml` を置く
-- [ ] Deploy Hook を Secrets に登録
+- [x] Deploy Hook を Secrets に登録
 - [ ] `main` にブランチ保護をかける
-- [ ] 適当な PR を出して CI が緑になることを確認
+- [ ] PR を出して CI が緑になることを確認
 
 > **Day 1 が終わった時点で、残りは「機能を足す」だけになる。** インフラ由来の問題はここで全部踏んである。
 
