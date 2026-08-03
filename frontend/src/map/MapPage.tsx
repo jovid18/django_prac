@@ -1,20 +1,25 @@
 import { APIProvider, ControlPosition, MapControl } from '@vis.gl/react-google-maps'
 import { useState } from 'react'
 
+import { AuthMenu } from '../auth/AuthMenu'
 import { env } from '../env'
 import type { LibraryListItem, SmokingStatus } from '../types/api'
 import { LibraryMarkers } from './LibraryMarkers'
 import { LibraryPanel } from './LibraryPanel'
 import { LocateControl } from './LocateControl'
+import { MapErrorBoundary } from './MapErrorBoundary'
 import styles from './MapPage.module.css'
 import { MapPlaceholder, MapView, type MapViewState } from './MapView'
 import { SmokingFilter } from './SmokingFilter'
 import { MIN_FETCH_ZOOM, useLibraries } from './useLibraries'
+import { useMapsAuthFailure } from './useMapsAuthFailure'
 
 export function MapPage() {
   const [view, setView] = useState<MapViewState | null>(null)
   const [smoking, setSmoking] = useState<SmokingStatus[]>([])
   const [selected, setSelected] = useState<LibraryListItem | null>(null)
+  // キーのリファラー制限違反・請求先無効など。地図は出ないが API は動く。
+  const mapAuthFailed = useMapsAuthFailure()
 
   const { data, isFetching, isError, refetch, zoomTooLow } = useLibraries(view, smoking)
   const items = data?.results ?? []
@@ -22,25 +27,30 @@ export function MapPage() {
   return (
     <div className={styles.page}>
       <header className={styles.header}>
-        <h1 className={styles.title}>東京都の図書館マップ</h1>
+        <div className={styles.headline}>
+          <h1 className={styles.title}>東京都の図書館マップ</h1>
+          <AuthMenu />
+        </div>
         <p className={styles.note}>
           ※ 喫煙区分は開発練習用の自動生成ダミーで、実際の施設とは関係ありません。
         </p>
       </header>
 
       <main className={styles.mapArea}>
-        <MapArea onSettled={setView}>
-          <LibraryMarkers
-            items={items}
-            bbox={view?.bbox ?? null}
-            zoom={view?.zoom ?? 0}
-            selectedId={selected?.id ?? null}
-            onSelect={setSelected}
-          />
-          <MapControl position={ControlPosition.RIGHT_BOTTOM}>
-            <LocateControl />
-          </MapControl>
-        </MapArea>
+        <MapErrorBoundary fallback={<MapAuthFailurePlaceholder />}>
+          <MapArea onSettled={setView} authFailed={mapAuthFailed}>
+            <LibraryMarkers
+              items={items}
+              bbox={view?.bbox ?? null}
+              zoom={view?.zoom ?? 0}
+              selectedId={selected?.id ?? null}
+              onSelect={setSelected}
+            />
+            <MapControl position={ControlPosition.RIGHT_BOTTOM}>
+              <LocateControl />
+            </MapControl>
+          </MapArea>
+        </MapErrorBoundary>
 
         <div className={styles.overlayLeft}>
           <SmokingFilter value={smoking} onChange={setSmoking} />
@@ -75,9 +85,13 @@ export function MapPage() {
 
       <footer className={styles.footer}>
         <span className={styles.status}>
-          {zoomTooLow
-            ? `zoom ${view?.zoom.toFixed(1)} · 検索は zoom ${MIN_FETCH_ZOOM} 以上`
-            : `${items.length} 件表示中${data?.truncated ? '（上限）' : ''}`}
+          {/* ★ 地図が死んでいるのに「N 件表示中」と出すと嘘になる。
+              リファラー制限違反を実際に踏んだときに気づいた（docs/07-frontend.md）。 */}
+          {mapAuthFailed
+            ? '地図を読み込めていません'
+            : zoomTooLow
+              ? `zoom ${view?.zoom.toFixed(1)} · 検索は zoom ${MIN_FETCH_ZOOM} 以上`
+              : `${items.length} 件表示中${data?.truncated ? '（上限）' : ''}`}
         </span>
         {/* OpenStreetMap（ODbL）は表示義務がある。Google 側のロゴは地図に自動で出る。 */}
         <span className={styles.attribution}>
@@ -99,13 +113,20 @@ export function MapPage() {
  */
 function MapArea({
   onSettled,
+  authFailed,
   children,
 }: {
   onSettled: (view: MapViewState) => void
+  authFailed: boolean
   children: React.ReactNode
 }) {
   if (!env.mapEnabled) {
     return <MapPlaceholder title="地図は無効化されています" detail="VITE_MAP_ENABLED=0" />
+  }
+  // ★ Google 自身も地図の枠内にエラーを出すが、**ライト配色固定**で
+  //   こちらのダークモードに追従しない。自分の表示に差し替える。
+  if (authFailed) {
+    return <MapAuthFailurePlaceholder />
   }
   if (!env.googleMapsApiKey) {
     return (
@@ -122,6 +143,15 @@ function MapArea({
     <APIProvider apiKey={env.googleMapsApiKey} language="ja" region="JP">
       <MapView onSettled={onSettled}>{children}</MapView>
     </APIProvider>
+  )
+}
+
+function MapAuthFailurePlaceholder() {
+  return (
+    <MapPlaceholder
+      title="地図を表示できません"
+      detail="API キーがこのサイトからの利用を許可していません（リファラー制限 / 請求先の設定を確認）"
+    />
   )
 }
 

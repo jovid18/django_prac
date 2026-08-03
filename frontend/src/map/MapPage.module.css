@@ -12,6 +12,15 @@
   border-bottom: 1px solid var(--line);
 }
 
+/* タイトルと認証メニューを 1 行に。gap を空けておくと 375px でも折り返せる。 */
+.headline {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  align-items: center;
+  justify-content: space-between;
+}
+
 .title {
   margin: 0;
   font-size: 16px;
@@ -136,6 +145,11 @@
     right: 10px;
     left: 10px;
     width: auto;
+    /* ★ 画面幅いっぱいに広げると Google のロゴ（地図の左下）に重なる。
+       375px で実機確認して見つけた。ロゴと著作権表示を覆うのは
+       Maps の規約違反なので、その帯（実測 22px 前後）の分だけ持ち上げる。
+       デスクトップ幅では右寄せなのでロゴ（左下）に当たらない。 */
+    bottom: 36px;
   }
 
   .toast {

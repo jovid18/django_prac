@@ -15,7 +15,11 @@ dependencies = [
     "psycopg[binary]",          # PostgreSQL ドライバ v3
     "gunicorn",                 # 本番の WSGI サーバ
     "whitenoise",               # Django Admin の静的ファイル
-    "google-auth",              # Google ID トークンの検証
+    # Google ID トークンの検証。
+    # ★ [requests] を付けないと `google.auth.transport.requests` が
+    #   ModuleNotFoundError になる。素の google-auth は HTTP クライアントを
+    #   同梱しておらず、公開鍵の取得に使うトランスポートが別 extra になっている。
+    "google-auth[requests]",
 ]
 
 [dependency-groups]

@@ -297,3 +297,6 @@ Render には[公式の Terraform プロバイダ](https://render.com/docs/terra
 | 2026-08-03 | **Django を 5.2 LTS → 6.0 に変更。** 5.2 を選んだ根拠（simplejwt の 5.2 非対応疑い）が誤りだったため撤回。フロントと揃えて最新を採る |
 | 2026-08-03 | **地図を MapLibre + 地理院タイル → Google Maps に変更。** 候補を実際に並べて描画した結果、見た目を優先。キーと課金アカウントが必要になる点を受け入れた（上の節） |
 | 2026-08-03 | `frontend/tsconfig.app.json` に **`strict: true` を追加**。文書には「テンプレートで有効」と書いていたが実際には入っていなかった |
+| 2026-08-03 | Day 4。依存を `google-auth` → **`google-auth[requests]`** に変更。素の `google-auth` は HTTP クライアントを同梱しておらず、`google.auth.transport.requests` が `ModuleNotFoundError` になる（`06-auth.md`） |
+| 2026-08-03 | Day 4。`docs/05-api.md` の「日時は UTC / `Z`」を **「`+09:00` オフセット付き」に訂正**。`TIME_ZONE = "Asia/Tokyo"` かつ `USE_TZ = True` のとき DRF は現在のタイムゾーンで描画し、出力タイムゾーンを変える設定は DRF に無い。実装に合わせた |
+| 2026-08-03 | Day 4。**地図の周りにエラーバウンダリを追加**（`MapErrorBoundary.tsx`）。リファラー制限違反を実際に起こしたところ、壊れた地図の上で `<AdvancedMarker>` が例外を投げ、React 19 が**アプリのツリー全体を unmount**した（`07-frontend.md`） |

@@ -1,0 +1,44 @@
+.wrap {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  font-size: 12px;
+}
+
+/* loading の間に確保しておく幅。ここが 0 だとヘッダーの高さが跳ねる。 */
+.placeholder {
+  display: block;
+  width: 80px;
+  height: 22px;
+}
+
+.who {
+  max-width: 12ch;
+  overflow: hidden;
+  color: var(--sub);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.link {
+  padding: 3px 8px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: none;
+  color: inherit;
+  font: inherit;
+  font-size: 12px;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.primary {
+  padding: 3px 10px;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  background: var(--fg);
+  color: var(--bg);
+  font-size: 12px;
+  font-weight: 700;
+  text-decoration: none;
+}

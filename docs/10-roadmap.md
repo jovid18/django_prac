@@ -156,13 +156,28 @@
 - [x] 喫煙区分フィルタ UI
 - [x] `truncated` / 0 件 / エラー / ローディングの表示
 - [x] **地図自体が読めなかったときの表示**（キー未設定 / `VITE_MAP_ENABLED=0` はプレースホルダ）
-      - [ ] リファラー制限違反・請求先無効のときの見え方は未確認（Google が地図上にエラーを出す）
+      - [x] リファラー制限違反のときの見え方を確認した（Day 4。`http://<LAN IP>:5173` から開いて
+            **実際に `RefererNotAllowedMapError` を起こした**）。分かったことが 3 つあり、
+            **どれも実害だったので直した**（`07-frontend.md`「地図の『キーが弾かれた』を検出する」）:
+        1. `APIProvider` のロード状態では検出できない（読み込み成功**後**に失敗するため）
+           → `window.gm_authFailure` を使う
+        2. Google のエラー画面は**ライト配色固定**でダークモードに追従しない → 自前表示に差し替え
+        3. **アプリ全体が真っ暗になる。** 壊れた地図の上で `<AdvancedMarker>` が例外を投げ、
+           React 19 がツリー全体を unmount する → **地図の周りにエラーバウンダリを置いた**
+        - フッターが「152 件表示中」と嘘をついていたのも直した（地図が死んでも API は生きている）
 - [x] ダークモードは `colorScheme="FOLLOW_SYSTEM"` で当てる
       - ⚠ `colorScheme` は初期化時のみ有効。アプリ内トグルを付けるなら `<Map key={scheme}>` で
         作り直す = **切り替えごとに 1 map load** なので、トグルは UI 側だけに効かせるほうが安い
 - [x] 現在地ボタン（`useGeolocation`）
       - [x] 許可された場合に現在地マーカー + `panTo` + zoom 14
-      - [ ] **拒否されたときの挙動を実際に試す**（実装はしてあるが未検証。ブラウザの設定で拒否して確認）
+      - [x] **拒否されたときの挙動を実際に試した**（Day 4）。
+            ブラウザの設定をいじる代わりに **Permissions Policy で拒否させた**:
+            `<iframe src="/" allow="geolocation 'none'">` に自分自身を埋めると、
+            同一オリジンでも `getCurrentPosition` が **code 1（`PERMISSION_DENIED`）**で失敗する。
+            結果は設計どおり —— 「位置情報が拒否されています。ブラウザの設定から許可してください。」が出て、
+            **地図と検索は動いたまま**（152 件表示中）。
+            ⚠ `allow=""` では拒否にならない（空文字は「指定なし」= 既定の `self` が効く）。
+            `geolocation 'none'` と明示する必要がある
 - [x] `streetViewControl={false}` / `mapTypeControl={false}`（Street View は別 SKU）
 - [x] 開発中に地図を描かないスイッチ（`VITE_MAP_ENABLED=0`）
 - [x] **Cloud Console の Quotas で日次上限を掛ける**（300/日。無料枠 10,000/月 ≒ 333/日）← 手作業
@@ -173,24 +188,44 @@
         値を入れてから main にマージする順序にした（後だと Manual Deploy がもう 1 回必要）
       - キーのリファラー制限に本番 URL を追加済み。**Console にエラーが出ないことまで確認**
         （`RefererNotAllowedMapError` が出ていない = 制限が正しい）
-- [ ] モバイル幅（375px）で地図とパネルが破綻しないか確認（CSS は書いたが未検証）
+- [x] モバイル幅（375px）で地図とパネルが破綻しないか確認（Day 4 に実測）
+      - 横スクロールなし、ヘッダーは 1 行に収まる
+      - **実害を 1 件発見して修正: 詳細パネルが Google のロゴを覆っていた。**
+        480px 以下でパネルを左右いっぱいに広げているため、地図左下のロゴに重なる。
+        **ロゴと著作権表示を覆うのは規約違反**なので `bottom: 36px` で持ち上げた。
+        デスクトップ幅では右寄せなので当たらない = **幅を変えて見るまで気づけない類の不具合**
 
 ## Day 4 — 認証
 
 順番が大事。**ID/PW を先に完成させてから Google に進む。**
 
-- [ ] SimpleJWT の設定、`token_blacklist` を追加
-- [ ] `POST /api/auth/register/` `login/`
-- [ ] **Cookie 版の `refresh/` カスタムビュー**（`06-auth.md`。ここが一番手を動かす）
-- [ ] `logout/` `me/`
-- [ ] フロント: `AuthContext` + `api/client.ts`（401 → refresh → 1 回だけリトライ）
-- [ ] **起動時に refresh を叩いてログイン状態を復帰させる**
-- [ ] ログイン / 登録画面
-- [ ] ここで一度デプロイして、**本番でリロードしてもログインが維持されるか確認**
-      → 維持されなければ Cookie の `SameSite=None; Secure`（`08-deploy-render.md` のエラー表）
-- [ ] `POST /api/auth/google/`（ID トークン検証、`aud` と `email_verified` のチェック）
-- [ ] フロント: Google Identity Services のボタン
-- [ ] 本番で Google ログインを確認
+- [x] SimpleJWT の設定、`token_blacklist` を追加（Day 1 で設定済み。ここでは使い始めただけ）
+- [x] `POST /api/auth/register/` `login/`
+- [x] **Cookie 版の `refresh/` カスタムビュー**（`06-auth.md`。ここが一番手を動かす）
+      - ローテーションした refresh を Cookie に書き戻す。**忘れると 2 回目が 401**
+      - 使えない Cookie は 401 と一緒に削除する
+- [x] `logout/` `me/`
+- [x] フロント: `AuthContext` + `api/client.ts`（401 → refresh → 1 回だけリトライ）
+      - **refresh は single-flight。** StrictMode の二重マウントでローテーションが競合する
+- [x] **起動時に refresh を叩いてログイン状態を復帰させる**
+- [x] ログイン / 登録画面（`AuthPage` 1 枚で両方を兼ねる）+ `react-router` 導入
+- [x] `POST /api/auth/google/`（ID トークン検証、`aud` と `email_verified` のチェック）
+      - sub で突き合わせ / 同一メールの既存ユーザーへの紐付け / client_id 未設定なら 503
+- [x] フロント: Google Identity Services のボタン（`?hl=ja` でラベルを日本語に固定）
+- [x] **ローカルで一通り通した**（ブラウザで実測）
+      - 登録 → 地図に戻ってログイン状態 / **F5 でログイン維持** / ログアウト → 再ログイン
+      - パスワード誤りで「メールアドレスまたはパスワードが正しくありません。」
+      - `refresh` は StrictMode でも **1 回だけ**飛ぶ
+      - **未ログインでも地図・一覧・詳細が見られる**ことを Cookie 無しの独立コンテキストで確認
+- [x] テスト 71 件（うち accounts 33 件）
+- [ ] **本番でリロードしてもログインが維持されるか確認** ← マージ後の宿題
+      → ⚠ フロントと API は `*.onrender.com` の別サブドメインで、**別サイト扱い**
+        （`onrender.com` は Public Suffix List に載っている）。リフレッシュ Cookie は
+        third-party cookie になるので、**Safari やサードパーティ Cookie ブロック下では維持されない**。
+        Chrome で確認する。根本回避は独自ドメイン（`06-auth.md`）
+- [ ] **本番で Google ログインを確認** ← マージ後の宿題
+      → サーバ側は `verify_oauth2_token` を差し替えてテストしてあるが、
+        **実際の Google アカウントでのログインは未実施**（ローカルでもまだ）
 
 ## Day 5 — 仕上げと Should
 

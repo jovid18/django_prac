@@ -29,37 +29,46 @@ npm install react-router @vis.gl/react-google-maps @googlemaps/markerclusterer @
 
 ## ディレクトリ構成
 
+Day 4 までの実際の構成（当初案から名前が変わった箇所には理由を書いた）。
+
 ```
 frontend/src/
-├── main.tsx                 # エントリ。APIProvider / QueryClientProvider / AuthProvider / Router を巻く
+├── main.tsx                 # エントリ。QueryClientProvider / BrowserRouter / AuthProvider を巻く
 ├── App.tsx                  # ルート定義
 ├── env.ts                   # import.meta.env を 1 箇所で型付けして読む
 │
 ├── api/
-│   ├── client.ts            # fetch ラッパ。401 → refresh → リトライ
-│   ├── auth.ts              # register / login / google / me / logout
-│   └── libraries.ts         # 一覧 / 詳細 / nearby / favorite
+│   ├── client.ts            # fetch ラッパ。アクセストークン保持 + 401 → refresh → 1 回リトライ
+│   └── libraries.ts         # 一覧 / 詳細
 │
 ├── auth/
-│   ├── AuthContext.tsx      # user / accessToken / login / logout
-│   ├── LoginPage.tsx
-│   ├── RegisterPage.tsx
-│   ├── GoogleButton.tsx     # Google Identity Services のボタン描画
-│   └── RequireAuth.tsx      # 未ログインなら /login へ
+│   ├── api.ts               # register / login / google / me / logout（api/auth.ts から移した。
+│   │                        #   認証の型と呼び出しは auth/ に寄せたほうが追いやすい）
+│   ├── context.ts           # Context 定義 + useAuth。**コンポーネントを含めない**
+│   │                        #   （oxlint の react/only-export-components に引っかかる）
+│   ├── AuthProvider.tsx     # 状態と起動時 refresh
+│   ├── AuthPage.tsx         # ログインと登録を 1 枚で兼ねる（差分は文言と 1 フィールドだけ）
+│   ├── AuthMenu.tsx         # ヘッダー右上のログイン状態
+│   └── GoogleSignInButton.tsx
 │
 ├── map/
 │   ├── MapPage.tsx          # 地図画面全体（地図 + フィルタ + 詳細パネル）
 │   ├── MapView.tsx          # <Map> のラッパ。カメラの初期値と onIdle をここに閉じる
-│   ├── LibraryMarkers.tsx   # AdvancedMarker + MarkerClusterer
+│   ├── MapErrorBoundary.tsx # 地図の例外でアプリ全体を落とさないための境界
+│   ├── LibraryMarkers.tsx   # AdvancedMarker（クラスタは useClusters で計算）
 │   ├── LibraryPanel.tsx     # 選択中の図書館の詳細
 │   ├── SmokingFilter.tsx    # 喫煙区分フィルタ
+│   ├── useClusters.ts       # supercluster でクラスタを計算する
 │   ├── useGeolocation.ts    # 現在地フック
-│   └── useLibraries.ts      # bbox が変わったら再取得する React Query フック
+│   ├── useLibraries.ts      # bbox が変わったら再取得する React Query フック
+│   └── useMapsAuthFailure.ts # gm_authFailure を拾う
 │
-├── components/              # Button / Spinner / ErrorBox など汎用
 └── types/
     └── api.ts               # API レスポンスの型
 ```
+
+**`components/` はまだ作っていない。** 汎用化したいものが 2 つ以上出てから作る。
+`RequireAuth.tsx` も未作成（Day 5 のお気に入り画面で初めて必要になる）。
 
 ## 画面と経路
 
@@ -330,6 +339,16 @@ isCluster(feature) ? (
 | `Maximum update depth exceeded`（マーカーで無限ループ） | `ref={(m) => f(m, id)}` は毎レンダーで識別子が変わるため、React が「古い ref を null で呼ぶ → 新しい ref を呼ぶ」を繰り返す。そこで `setState` すると回り続ける | ref で受けた実体を state に入れない。**そもそもクラスタをデータ側で計算すれば ref は不要**（上の節） |
 | 依存を入れ替えた直後に画面が白くなり `504 (Outdated Optimize Dep)` | Vite の依存最適化キャッシュが古い | `docker compose restart web` |
 
+## Day 4 で踏んだ落とし穴
+
+| 症状 | 原因 | 対処 |
+|---|---|---|
+| **リロードのたびにログアウトされる**（になりかけた） | access はメモリにしか持たないので、リロードで消える | 起動時に `refresh` を 1 回叩いて復帰させる（`AuthProvider`）。**その間の `loading` 状態を `anonymous` と混ぜない**。混ぜるとヘッダーが「ログイン」→ユーザー名にチラつく |
+| **StrictMode で refresh が 2 本飛ぶ** | 開発時は effect が 2 回走る。`ROTATE_REFRESH_TOKENS` を有効にしているので、後から届いた方が**ブラックリスト済みの Cookie**を使い、正しいトークンまで無効化される | 進行中の refresh の Promise を保持して共有する（single-flight）。`client.ts` の `inFlightRefresh`。実測で「refresh は 1 回だけ」を確認した |
+| 起動時に **Console に赤い 401 が出る** | 未ログインの初回アクセスでも `refresh` は 401 を返す。fetch の失敗はブラウザが必ずコンソールに出す | **異常ではない。** 消せないので消さない。仕様として覚えておく |
+| Google のログインボタンのラベルが英語になる | GSI も既定はブラウザの言語に追従する。`renderButton` の `locale` だけでは効かなかった | スクリプト URL に **`?hl=ja`** を付ける（地図の `language="ja"` と同じ話） |
+| `declare global { interface Window { google } }` を書くと型が壊れる | `@types/google.maps` が同名の `google` 名前空間を持っている | グローバル拡張をせず、参照する場所で `globalThis` をキャストして畳む（`GoogleSignInButton.tsx`） |
+
 ## 状態管理
 
 | 状態 | 置き場所 |
@@ -350,14 +369,38 @@ isCluster(feature) ? (
 | 通信エラー | 「データを取得できませんでした / 再試行」ボタン |
 | 0 件 | 「この範囲に図書館はありません」 |
 | 上限到達 | 「表示上限に達しています。拡大してください」 |
-| **地図が読めない** | **キー未設定・リファラー制限違反・請求先無効のとき、Google は地図の代わりにエラーを出す。** 真っ白な画面にせず「地図を読み込めませんでした」を出す |
+| **地図が読めない** | キー未設定 / `VITE_MAP_ENABLED=0` は自前のプレースホルダ。**リファラー制限違反・請求先無効は下の節を参照**（検出方法が違う） |
+
+### 地図の「キーが弾かれた」を検出する（実測して分かったこと）
+
+`http://<LAN IP>:5173` から開いてリファラー制限違反を**実際に起こして**確認した。
+
+| 分かったこと | 対処 |
+|---|---|
+| **`APIProvider` のロード状態では検出できない。** `RefererNotAllowedMapError` はスクリプトの読み込みに成功した**後**に起きるので、状態は `LOADED` のまま成功扱いになる | `window.gm_authFailure` に関数を代入して待つ（`useMapsAuthFailure.ts`）。Google が用意している唯一の入口 |
+| Google は地図の枠内に**自前のライト配色のエラー画面**を出す。`colorScheme="FOLLOW_SYSTEM"` に追従しないので、ダークモードだと白い塊になる | 自分のプレースホルダに差し替える |
+| **フッターが「152 件表示中」と嘘をつく。** 地図が死んでも API は生きているため、件数だけ正常に更新され続ける | `gm_authFailure` を見て「地図を読み込めていません」に差し替える |
+| **アプリ全体が真っ暗になる。** Maps の内部状態が壊れた状態で `<AdvancedMarker>` が `Cannot read properties of undefined (reading 'getRootNode')` を投げ、React 19 が**ツリー全体を unmount する**（ヘッダーもフッターも消える） | **地図の周りにだけエラーバウンダリを置く**（`MapErrorBoundary.tsx`）。地図は「他人のコードが自分のツリーの中で DOM を触る」箇所なので、ここは境界を作る価値がある |
 
 ## スタイリング
 
 - **素の CSS Modules で十分。** UI ライブラリを入れるほどの画面数がない。
 - ダークモードは UI 側を `prefers-color-scheme` で、地図側を `colorScheme="FOLLOW_SYSTEM"` で対応する。
   ⚠ アプリ内トグルを付ける場合、地図の `colorScheme` は初期化時のみ有効なので `key` を変えて作り直す。
-- モバイル幅（375px）で地図とパネルが破綻しないことだけ確認する。
+- **地図の上に置くボタンは白地固定**（`LocateControl.module.css`）。半透明 + `var(--fg)` にすると
+  ダークの地図に溶けて見えなくなる。Google 純正のコントロールと同じ扱いにする。
+
+### モバイル幅（375px）の確認結果（Day 4 で実測）
+
+`375x667` をエミュレートして、詳細パネルを開いた状態まで確認した。
+
+- 横スクロールは発生しない（`scrollWidth === clientWidth === 375`）。
+- ヘッダーはタイトルと認証メニューが 1 行に収まる（収まらなくなったら `flex-wrap` で折り返す）。
+- **見つかった実際の問題: 詳細パネルが Google のロゴを覆っていた。**
+  480px 以下でパネルを左右いっぱい（`left/right: 10px`）に広げているため、地図の**左下**にある
+  ロゴと重なる。**ロゴと著作権表示を覆うのは Maps の規約違反**なので、
+  その帯（実測 22px 前後）の分だけ `bottom: 36px` で持ち上げた。
+  デスクトップ幅では右寄せなので当たらない —— **だから幅を変えて見るまで気づけなかった。**
 
 ## TypeScript
 
