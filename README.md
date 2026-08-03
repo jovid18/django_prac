@@ -98,7 +98,7 @@ sequenceDiagram
     participant A as API
 
     Note over F: 起動時。access はメモリなのでリロードで消えている
-    F->>A: POST /api/auth/refresh/ 本文なし・HttpOnly Cookie だけ送る
+    F->>A: POST /api/auth/refresh/ 本文なし。Cookie はブラウザが自動で付ける
 
     alt Cookie が有効
         A-->>F: access と Set-Cookie で新しい refresh
@@ -118,7 +118,47 @@ sequenceDiagram
   後から届いた方がブラックリスト済みの Cookie を使い、**正しいトークンまで無効化される。**
   React の StrictMode は effect を 2 回走らせるので、これが無いと開発中は必ず踏む。
 
-### 3. 探して飛ぶ（検索 / 近い順）
+### 3. Google ログイン
+
+```mermaid
+sequenceDiagram
+    participant U as ユーザー
+    participant F as フロント
+    participant G as Google
+    participant A as API
+
+    Note over F: ログイン画面を開いたときだけ GSI スクリプトを読み込む
+    F->>G: ボタンを描画（client_id / hl=ja）
+    U->>G: Google アカウントでサインイン
+    G-->>F: ID トークン（JWT）を callback で受け取る
+
+    F->>A: POST /api/auth/google/ に id_token を送る
+    A->>G: 公開鍵を取得して署名を検証
+
+    alt 検証 OK
+        Note over A: sub で突き合わせ → 無ければ同じ email に紐付け<br/>それも無ければ新規作成
+        A-->>F: user と access、Set-Cookie で refresh<br/>新規は 201 / 既存は 200
+        Note over F: access をメモリに置く。以降は ID/PW ログインと全く同じ
+    else 署名・aud・exp・email_verified のいずれかが NG
+        A-->>F: 401（どれが駄目かは返さない）
+    end
+```
+
+- **リダイレクトもクライアントシークレットも無い。** GSI が返すのは ID トークン（JWT）で、
+  認可コードの交換をしない。だから**クライアント ID は公開されて構わない値**になる。
+- **検証はサーバでやる。** `verify_oauth2_token` に client_id を渡すことが `aud` のチェックで、
+  **渡さないと他アプリ向けに発行された ID トークンをそのまま受け入れてしまう。**
+  そのため client_id 未設定なら検証を通さず **503**（401 と分けてあるので、
+  設定ミスか不正トークンかを切り分けられる）。
+- **突き合わせのキーは `sub`、email は補助。** Google のメールは変更されうるが `sub` は不変。
+  email だけで突き合わせると、ユーザーがメールを変えた瞬間に別アカウントが生える。
+- **`email_verified` の確認が「同じ email なら既存ユーザーに紐付ける」の前提。**
+  未確認メールで紐付けを許すと他人のアカウントを乗っ取れる。
+- レスポンスの形は register / login と同一。**フロントは「どこから来た user か」を気にしない。**
+- 本番で動かないときの最頻出は `GSI_LOGGER: The given origin is not allowed for the given client ID`
+  = Google Cloud の「承認済み JavaScript 生成元」に本番 URL が入っていない。
+
+### 4. 探して飛ぶ（検索 / 近い順）
 
 地図のピンを絞り込むのは喫煙区分フィルタの役割で、**検索と「近い順」は「探して飛ぶ」導線。**
 どちらも結果をクリックすると `map.panTo` でその館まで地図を動かす。
