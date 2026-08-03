@@ -241,12 +241,67 @@ LOGGING = { ... }   # console ハンドラに INFO 以上
 - [ ] 「現在地」ボタンが動く → HTTPS なので Geolocation が使える
 - [ ] 無限リダイレクトしていない → `SECURE_PROXY_SSL_HEADER`
 - [ ] Render のログにエラーが出ていない
+- [ ] **`/api/libraries/` がデータを返す** → `count: 0` なら DB が空。下の「本番 DB へのシード投入」へ
+
+## 本番 DB へのシード投入
+
+**デプロイしてもデータは入らない。** 起動コマンドで走るのは `migrate` と
+`collectstatic` だけで、`loaddata` は含まれていない。
+
+```
+症状: GET /api/libraries/ が {"count":0,"truncated":false,"results":[]} を返す
+      → エンドポイントは出ている（= コードは反映済み）が、DB が空
+```
+
+**無料プランは Shell 接続が使えない**ので、コンテナに入って流す手段がない。
+代わりに **External Database URL でローカルから流し込む。**
+
+```bash
+# Render ダッシュボード → 対象の DB → "External Database URL" をコピー
+DB="postgresql://<user>:<password>@<host>.singapore-postgres.render.com/<db>?sslmode=require"
+
+# ローカルの api コンテナから、接続先だけ差し替えて実行する
+docker compose exec -T -e DATABASE_URL="$DB" api python manage.py loaddata libraries
+```
+
+| 注意点 | |
+|---|---|
+| **`?sslmode=require` を付ける** | Render の外部接続は TLS 必須 |
+| **接続文字列は認証情報** | ファイルに書かず、その場のコマンド引数としてだけ使う。誤って共有したら Render でパスワードをローテーションする |
+| ローテーション後 | `DATABASE_URL` は `render.yaml` の `fromDatabase` で自動注入されるので、**API 側は設定変更なしで追従する**。再デプロイだけでよい |
+
+投入後の確認:
+
+```bash
+curl -sS "https://<api>.onrender.com/api/libraries/?limit=500" | head -c 80
+# → {"count":490,"truncated":false,...}
+```
+
+### 起動コマンドに `loaddata` を入れなかった理由
+
+`dockerCommand` に足せば自動化できそうに見えるが、**無料プランでは悪手**。
+
+無料 Web Service は 15 分でスリープし、**起きるたびにコンテナが再起動して
+起動コマンドが再実行される。** つまり起床のたびに 490 行を書き直すことになる。
+1 日に何十回も起こりうる。
+
+fixture の pk は固定なので重複はしないが、無駄な書き込みが増えるだけ。
+
+### 30 日ごとに再投入が必要
+
+無料 Postgres は 30 日で失効し、猶予 14 日の後にデータごと消える。
+新しい DB を作ったら上のコマンドをもう一度流す。
+
+自動化したい場合は **「テーブルが空のときだけシードする」** コマンドを作って
+起動コマンドに足す。起動ごとのコストは `SELECT EXISTS` 1 回で済むので、
+上記の問題を避けつつ DB 再作成に自動で追従できる。
 
 ## よくあるエラーと原因
 
 | 症状 | 原因 |
 |---|---|
 | **リクエストの半分くらいが 404 になる**（ログにはエラーが出ていない） | **ヘルスチェックと `SECURE_SSL_REDIRECT` の衝突。** 下記 |
+| API は動くが `count: 0` しか返らない | **DB にシードを入れていない。** デプロイでは `loaddata` は走らない（上記） |
 | `DisallowedHost at /` | `DJANGO_ALLOWED_HOSTS` 未設定 or ホスト名が違う |
 | ブラウザ Console に `blocked by CORS policy` | `FRONTEND_ORIGIN` の値が違う（末尾スラッシュが余計、`http`/`https` の取り違え） |
 | リダイレクトが多すぎる | `SECURE_PROXY_SSL_HEADER` の設定漏れ |

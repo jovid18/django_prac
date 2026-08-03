@@ -169,16 +169,19 @@
 
 ## 運用メモ
 
-### 無料 Postgres の期限が来たら
+### 無料 Postgres の期限が来たら（30 日ごと）
 
 ```
 1. Render で新しい Postgres を作る
 2. API の DATABASE_URL を新しい接続文字列に差し替える
 3. 再デプロイ（起動時に migrate が走る）
-4. Render の Shell から:
-     python manage.py loaddata libraries
-     python manage.py createsuperuser
+4. External Database URL を使ってローカルからシードを流し込む
+     docker compose exec -T -e DATABASE_URL="<external url>?sslmode=require" \
+       api python manage.py loaddata libraries
 ```
+
+**無料プランは Shell 接続が使えない**ので、コンテナに入って実行する手はない。
+手順の詳細と注意点は `08-deploy-render.md`「本番 DB へのシード投入」。
 
 ユーザーアカウントは消える。**そういうものとして運用する。**
 
