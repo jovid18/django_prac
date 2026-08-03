@@ -6,6 +6,8 @@ databases:
     databaseName: django_prac
     user: django_prac
     plan: free
+    # ★ API と同じリージョンにすること。別リージョンだと内部接続にならない。
+    region: singapore
     # ⚠ 無料 Postgres は作成から 30 日で失効し、猶予 14 日の後にデータごと削除される。
     #   1 アカウントにつき同時 1 個まで。バックアップ非対応。
     #   復旧は migrate + loaddata で行う前提（docs/00-decisions.md）。
@@ -48,7 +50,8 @@ services:
   - type: web
     name: django-prac-web
     runtime: static
-    plan: free
+    # ⚠ Static Site に plan は指定できない（"no such plan free for service type web"）。
+    #   CDN 配信で常に無料なので、そもそも plan という概念がない。
     rootDir: frontend
     buildCommand: npm ci && npm run build
     staticPublishPath: ./dist
