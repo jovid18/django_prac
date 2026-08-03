@@ -3,15 +3,29 @@
 **React + Django + PostgreSQL + Docker + Render** を一通り手に馴染ませるための練習用リポジトリ。
 東京都の図書館 490 件を地図で探し、お気に入りを登録できる。データは OpenStreetMap 由来。
 
-本来のテーマ（屋内で喫煙できる店のマッチング / [smocking-notes](https://github.com/jovid18/smocking-notes)）の
-データドメインを図書館に差し替えたもの。
-
 > ⚠ **図書館に付いている「喫煙区分」は練習用のダミーデータ**で、実在する施設の喫煙可否とは
-> 一切関係がない。元テーマの enum スキーマとフィルタ UI を練習するためだけに存在する。
+> 一切関係がない。**enum で表す複数状態のスキーマとフィルタ UI を練習するため**だけに
+> 存在する値で、シード時に固定シードの擬似乱数で割り当てている。
 > 画面上にもその旨を表示している。
 
 React 19 / Vite 8 / TypeScript・Django 6.0 / DRF・PostgreSQL 16・Google Maps JS API。
 バージョンと選定理由は [`docs/00-decisions.md`](docs/00-decisions.md)。
+
+## デモ
+
+| | |
+|---|---|
+| アプリ | <https://django-prac-web.onrender.com> |
+| API のヘルスチェック | <https://django-prac-api.onrender.com/api/health/> |
+
+> ⚠ **最初のアクセスは 1 分近く待つ。**
+> 無料プランの Web Service は 15 分無操作でスリープするため、API を起こすのに
+> **実測 44 秒**かかった。フロント（Static Site）は常に即座に開くので、
+> **「地図は出るがピンが出ない・ログインできない」ときは API の起動待ち。**
+> 上のヘルスチェックを開いて `{"status":"ok"}` が返ってからリロードする。
+>
+> 無料 Postgres は 30 日で失効するので、期限切れのタイミングだと
+> データが空になっていることがある（[運用メモ](docs/10-roadmap.md)）。
 
 ---
 
