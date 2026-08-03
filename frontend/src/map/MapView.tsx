@@ -1,5 +1,5 @@
-import { Map, type MapEvent } from '@vis.gl/react-google-maps'
-import type { ReactNode } from 'react'
+import { Map, type MapEvent, useMap } from '@vis.gl/react-google-maps'
+import { type ReactNode, useEffect } from 'react'
 
 import { env } from '../env'
 import type { Bbox } from '../types/api'
@@ -16,10 +16,15 @@ export type MapViewState = {
 type Props = {
   /** 操作が落ち着いたら呼ばれる。`onIdle` なので自前のデバウンスは不要。 */
   onSettled: (view: MapViewState) => void
+  /**
+   * 地図インスタンスを 1 段上へ渡す。**検索結果から `panTo` するため。**
+   * 破棄されたら `null` で呼ばれる。
+   */
+  onMapReady: (map: google.maps.Map | null) => void
   children?: ReactNode
 }
 
-export function MapView({ onSettled, children }: Props) {
+export function MapView({ onSettled, onMapReady, children }: Props) {
   const handleIdle = (e: MapEvent) => {
     const bounds = e.map.getBounds()
     const zoom = e.map.getZoom()
@@ -52,9 +57,30 @@ export function MapView({ onSettled, children }: Props) {
       className={styles.map}
       onIdle={handleIdle}
     >
+      <MapInstanceReporter onReady={onMapReady} />
       {children}
     </Map>
   )
+}
+
+/**
+ * `useMap()` を呼んで、地図インスタンスを親に渡すだけのコンポーネント。
+ *
+ * ★ `useMap()` は `<Map>` の内側でしか取れない。**検索ボックスを地図の外に
+ *   置いたまま `panTo` を呼べるようにするため**にこれを噛ませている。
+ *   `<MapControl>` で検索ボックスごと地図の内側に入れる手もあるが、それだと
+ *   **地図が死んだときに検索ボックスまで消える。** 地図が壊れてもアプリは
+ *   動き続けるようにするのは Day 3 で決めた方針（docs/07-frontend.md）。
+ */
+function MapInstanceReporter({ onReady }: { onReady: (map: google.maps.Map | null) => void }) {
+  const map = useMap()
+
+  useEffect(() => {
+    onReady(map)
+    return () => onReady(null)
+  }, [map, onReady])
+
+  return null
 }
 
 export function MapPlaceholder({ title, detail }: { title: string; detail: string }) {

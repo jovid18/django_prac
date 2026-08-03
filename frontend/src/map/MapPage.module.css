@@ -40,11 +40,17 @@
 
 /* --- 地図の上に重ねる UI ------------------------------------------------- */
 
+/* 検索ボックスと喫煙区分フィルタを縦に積む。
+   検索結果は下に押し下げずフィルタの上に重ねる（SearchBox.module.css の .panel）。
+   375px でフィルタを押し下げると地図がほとんど見えなくなるため。 */
 .overlayLeft {
   position: absolute;
   top: 10px;
   left: 10px;
   z-index: 2;
+  display: grid;
+  gap: 8px;
+  justify-items: start;
 }
 
 .overlayTop {

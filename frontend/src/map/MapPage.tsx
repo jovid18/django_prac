@@ -10,6 +10,7 @@ import { LocateControl } from './LocateControl'
 import { MapErrorBoundary } from './MapErrorBoundary'
 import styles from './MapPage.module.css'
 import { MapPlaceholder, MapView, type MapViewState } from './MapView'
+import { SearchBox } from './SearchBox'
 import { SmokingFilter } from './SmokingFilter'
 import { MIN_FETCH_ZOOM, useLibraries } from './useLibraries'
 import { useMapsAuthFailure } from './useMapsAuthFailure'
@@ -18,6 +19,9 @@ export function MapPage() {
   const [view, setView] = useState<MapViewState | null>(null)
   const [smoking, setSmoking] = useState<SmokingStatus[]>([])
   const [selected, setSelected] = useState<LibraryListItem | null>(null)
+  // 検索結果から panTo するために地図インスタンスを持つ（MapView の
+  // MapInstanceReporter が入れる）。地図が無効・失敗しているときは null。
+  const [map, setMap] = useState<google.maps.Map | null>(null)
   // キーのリファラー制限違反・請求先無効など。地図は出ないが API は動く。
   const mapAuthFailed = useMapsAuthFailure()
 
@@ -38,7 +42,7 @@ export function MapPage() {
 
       <main className={styles.mapArea}>
         <MapErrorBoundary fallback={<MapAuthFailurePlaceholder />}>
-          <MapArea onSettled={setView} authFailed={mapAuthFailed}>
+          <MapArea onSettled={setView} onMapReady={setMap} authFailed={mapAuthFailed}>
             <LibraryMarkers
               items={items}
               bbox={view?.bbox ?? null}
@@ -53,6 +57,7 @@ export function MapPage() {
         </MapErrorBoundary>
 
         <div className={styles.overlayLeft}>
+          <SearchBox smoking={smoking} map={map} onSelect={setSelected} />
           <SmokingFilter value={smoking} onChange={setSmoking} />
         </div>
 
@@ -113,10 +118,12 @@ export function MapPage() {
  */
 function MapArea({
   onSettled,
+  onMapReady,
   authFailed,
   children,
 }: {
   onSettled: (view: MapViewState) => void
+  onMapReady: (map: google.maps.Map | null) => void
   authFailed: boolean
   children: React.ReactNode
 }) {
@@ -141,7 +148,9 @@ function MapArea({
     // language / region を固定する。既定はブラウザの言語に追従するので、
     // 韓国語ブラウザだと東京の地図にハングルのラベルが出る。
     <APIProvider apiKey={env.googleMapsApiKey} language="ja" region="JP">
-      <MapView onSettled={onSettled}>{children}</MapView>
+      <MapView onSettled={onSettled} onMapReady={onMapReady}>
+        {children}
+      </MapView>
     </APIProvider>
   )
 }

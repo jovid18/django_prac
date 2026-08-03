@@ -114,6 +114,31 @@ def test_text_search_matches_name(client, libraries):
     assert names(res) == {"新宿中央図書館"}
 
 
+def test_text_search_matches_address_too(client, libraries):
+    """住所だけに含まれる語でもヒットする。
+
+    フロントの検索欄が「名称・住所で検索」と謳っているので、住所側が効いて
+    いることを固定する。名称には「東京都」が入っていないので、これが通れば
+    住所で当たっている。
+    """
+    res = client.get(LIST_URL, {"q": "東京都"})
+
+    assert len(names(res)) == len(libraries)
+
+
+def test_text_search_works_without_bbox(client, libraries, tokyo_center_bbox):
+    """bbox 抜きでも検索できる（都全域が対象になる）。
+
+    フロントの検索は**表示範囲の外へ飛ぶ**ための導線なので、bbox を送らない
+    （docs/07-frontend.md）。都心の bbox では落ちる八王子が、bbox 無しなら
+    出てくることを対にして確認する。
+    """
+    assert "八王子図書館" not in names(
+        client.get(LIST_URL, {"q": "八王子", "bbox": tokyo_center_bbox})
+    )
+    assert "八王子図書館" in names(client.get(LIST_URL, {"q": "八王子"}))
+
+
 def test_filters_combine(client, libraries, tokyo_center_bbox):
     res = client.get(LIST_URL, {"bbox": tokyo_center_bbox, "smoking": SmokingStatus.BOTH})
 

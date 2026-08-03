@@ -28,6 +28,26 @@ export function fetchLibraryDetail(id: number): Promise<LibraryDetail> {
   return apiGet<LibraryDetail>(`/api/libraries/${id}/`)
 }
 
+/**
+ * 名称・住所のテキスト検索。
+ *
+ * ★ **`bbox` を送らない。** 「表示範囲の外にある館へ飛ぶ」ための検索なので、
+ *   bbox を付けると八王子を見ながら「新宿」を検索して 0 件、という
+ *   説明のつかない挙動になる。結果をクリックしたら地図を動かす前提
+ *   （docs/07-frontend.md）。
+ */
+export function searchLibraries(args: {
+  q: string
+  smoking: SmokingStatus[]
+  limit: number
+}): Promise<LibraryListResponse> {
+  return apiGet<LibraryListResponse>('/api/libraries/', {
+    q: args.q,
+    smoking: args.smoking.join(','),
+    limit: args.limit,
+  })
+}
+
 // --- お気に入り -------------------------------------------------------------
 //
 // API 側はどちらも冪等（二重登録も未登録の解除も成功扱い）なので、
