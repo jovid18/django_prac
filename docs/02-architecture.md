@@ -178,8 +178,8 @@ DATABASES = {"default": dj_database_url.config(conn_max_age=600)}  # DATABASE_UR
 | `whitenoise` | Django admin の静的ファイル |
 | `google-auth` | Google ID トークンの検証 |
 | `python-dotenv` | ローカルの `.env` 読み込み（任意） |
-| `pytest` + `pytest-django` | テスト |
-| `ruff` | Lint + フォーマット |
+| `pytest` + `pytest-django` | テスト（dev グループ） |
+| `ruff` | Lint + フォーマット（dev グループ） |
 
 ### frontend
 
@@ -192,7 +192,7 @@ DATABASES = {"default": dj_database_url.config(conn_max_age=600)}  # DATABASE_UR
 | `@tanstack/react-query` | サーバ状態のキャッシュ（地図を動かすたびに再取得するので効く） |
 | `zod` | API レスポンスの検証（任意だが推奨） |
 | `typescript`, `vite`, `@vitejs/plugin-react` | ビルド |
-| `eslint`, `prettier` | Lint |
+| `oxlint` | Lint + フォーマット。**create-vite の既定**（eslint / prettier は使わない） |
 
 > 状態管理ライブラリ（Redux / Zustand）は入れない。この規模なら `useState` と React Query で足り、無いほうが練習の邪魔にならない。
 

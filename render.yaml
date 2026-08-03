@@ -1,0 +1,71 @@
+# Render Blueprint（IaC）。管理画面で手作業せず、このファイルから作る。
+# 詳細と初回デプロイ手順は docs/08-deploy-render.md。
+
+databases:
+  - name: django-prac-db
+    databaseName: django_prac
+    user: django_prac
+    plan: free
+    # ⚠ 無料 Postgres は作成から 30 日で失効し、猶予 14 日の後にデータごと削除される。
+    #   1 アカウントにつき同時 1 個まで。バックアップ非対応。
+    #   復旧は migrate + loaddata で行う前提（docs/00-decisions.md）。
+
+services:
+  # --- Django API ----------------------------------------------------------
+  - type: web
+    name: django-prac-api
+    runtime: docker
+    plan: free
+    region: singapore # DB と同じリージョンにすること（別だと内部接続にならない）
+    rootDir: backend
+    dockerfilePath: ./Dockerfile
+    # target 未指定 = 最終ステージ（prod）が使われる
+    autoDeploy: false # CI 通過時だけ Deploy Hook で叩く（docs/09-ci-cd.md）
+    healthCheckPath: /api/health/
+    # 無料プランでは preDeployCommand が使えないので、起動コマンドの先頭で migrate する。
+    dockerCommand: >
+      sh -c "python manage.py migrate --noinput &&
+             python manage.py collectstatic --noinput &&
+             gunicorn config.wsgi:application --bind 0.0.0.0:$PORT --workers 2"
+    envVars:
+      - key: DJANGO_SETTINGS_MODULE
+        value: config.settings.production
+      - key: DJANGO_SECRET_KEY
+        generateValue: true # Render が生成。32 文字以上になる
+      - key: DATABASE_URL
+        fromDatabase:
+          name: django-prac-db
+          property: connectionString
+      # ↓ 初回デプロイで URL が確定してから手で入れる
+      - key: DJANGO_ALLOWED_HOSTS
+        sync: false
+      - key: FRONTEND_ORIGIN
+        sync: false
+      - key: GOOGLE_OAUTH_CLIENT_ID
+        sync: false
+
+  # --- React フロント ------------------------------------------------------
+  - type: web
+    name: django-prac-web
+    runtime: static
+    plan: free
+    rootDir: frontend
+    buildCommand: npm ci && npm run build
+    staticPublishPath: ./dist
+    autoDeploy: false
+    envVars:
+      # ⚠ フロントの環境変数はビルド時に埋め込まれる。
+      #   値を変えたら必ず再デプロイ（再ビルド）すること。
+      - key: VITE_API_BASE_URL
+        sync: false
+      - key: VITE_GOOGLE_OAUTH_CLIENT_ID
+        sync: false
+    routes:
+      # これが無いと /login を直接開いたときに 404 になる（SPA の典型的な事故）
+      - type: rewrite
+        source: /*
+        destination: /index.html
+    headers:
+      - path: /*
+        name: X-Frame-Options
+        value: DENY

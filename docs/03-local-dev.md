@@ -7,7 +7,17 @@
 ## 前提
 
 - Docker Desktop（もしくは OrbStack など）がインストール済み
-- ポート `5173` / `8000` / `5432` が空いている
+- ホスト側のポート `5173` / `8001` / `5433` が空いている
+
+> **ホスト側のポートは既定値からずらしてある。** `8000` と `5432` は別プロジェクトのコンテナや
+> ローカルの PostgreSQL が使っていることが多いため。**コンテナ内のポートは 8000 / 5432 のまま**なので、
+> `web` から `api:8000` へ、`api` から `db:5432` へという内部の経路は変わらない。
+>
+> | | コンテナ内 | ホストから |
+> |---|---|---|
+> | api | 8000 | **8001** |
+> | db | 5432 | **5433** |
+> | web | 5173 | 5173 |
 
 ## `docker-compose.yml`（たたき台）
 
@@ -81,8 +91,11 @@ volumes:
 
 依存管理は **uv** に確定している（`00-decisions.md`）。
 
+**マルチステージにしてある。** 開発ツール（ruff / pytest）を本番イメージに含めないため。
+
 ```dockerfile
-FROM python:3.13-slim
+# --- 共通の土台 ---
+FROM python:3.13-slim AS base
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
@@ -91,24 +104,21 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PATH="/app/.venv/bin:$PATH"
 
 WORKDIR /app
+COPY --from=ghcr.io/astral-sh/uv:0.9 /uv /usr/local/bin/uv
 
-# uv 本体を公式イメージからコピーする（pip 経由より速く、バージョンも固定できる）
-COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
-
-# psycopg[binary] を使うのでビルドツールは基本不要。
-# ソースビルド版の psycopg に切り替える場合は libpq-dev / gcc をここで入れる。
-
-# ★ 依存だけ先にインストールする（レイヤキャッシュを効かせるため）。
-#    ソースを変えただけのときに依存の再インストールが走らない。
+# ★ 依存だけ先に入れてレイヤを分ける
 COPY pyproject.toml uv.lock ./
-RUN uv sync --frozen --no-install-project --no-dev
 
+# --- 開発用（compose が target: dev で使う）---
+FROM base AS dev
+RUN uv sync --frozen
 COPY . .
+CMD ["python", "manage.py", "runserver", "0.0.0.0:8000"]
+
+# --- 本番用（最終ステージ = target 未指定でこれになる）---
+FROM base AS prod
 RUN uv sync --frozen --no-dev
-
-EXPOSE 8000
-
-# デプロイ時のデフォルト。ローカルは compose の command で上書きされる。
+COPY . .
 CMD ["gunicorn", "config.wsgi:application", "--bind", "0.0.0.0:8000", "--workers", "2"]
 ```
 
@@ -116,8 +126,9 @@ CMD ["gunicorn", "config.wsgi:application", "--bind", "0.0.0.0:8000", "--workers
 |---|---|
 | `COPY pyproject.toml uv.lock` を先に | **依存のインストールを独立したレイヤにする。** ソースを 1 行直すたびに全依存を入れ直すのを防ぐ |
 | `--frozen` | `uv.lock` の通りに入れる。ロックを勝手に更新させない（`npm ci` に相当） |
-| `--no-dev` | 本番イメージに `pytest` / `ruff` を含めない |
-| `PATH` に `.venv/bin` | `uv run` を毎回書かずに `gunicorn` を直接叩けるようにする |
+| `dev` / `prod` の分割 | 本番イメージに `pytest` / `ruff` を入れない。**分けないと `docker compose exec api ruff` が動かない** |
+| `prod` を最終ステージに | Render は `--target` を付けずにビルドするので、最後のステージが選ばれる |
+| `PATH` に `.venv/bin` | `uv run` を毎回書かずに `gunicorn` / `ruff` を直接叩ける |
 
 > **`uv.lock` は必ず commit する。** これが無いと `--frozen` が失敗し、ビルドが通らない。
 
@@ -189,8 +200,9 @@ docker compose exec api python manage.py createsuperuser
 | URL | 内容 |
 |---|---|
 | http://localhost:5173 | フロント |
-| http://localhost:8000/api/health/ | API の疎通 |
-| http://localhost:8000/admin/ | Django Admin |
+| http://localhost:5173/api/health/ | **Vite proxy 経由の API**（本来の経路） |
+| http://localhost:8001/api/health/ | API を直に叩く |
+| http://localhost:8001/admin/ | Django Admin |
 
 ## よく使うコマンド
 
@@ -221,7 +233,8 @@ docker compose exec db psql -U postgres -d django_prac
 
 | 症状 | 原因 | 対処 |
 |---|---|---|
-| `web` が `vite: not found` で落ちる | 匿名ボリュームで `node_modules` が空になっている | `docker compose down -v` してから `docker compose up --build` |
+| **イメージを作り直したのに中身が古いまま**（例: `ruff: not found` が消えない） | **匿名ボリュームは `docker compose up --build` では更新されない。** 最初に作られたときの内容を保持し続ける（`/app/.venv` や `/app/node_modules` がこれ） | `docker compose up -d --renew-anon-volumes <service>`。**DB の名前付きボリュームは消えない**ので安全 |
+| `web` が `vite: not found` で落ちる | 同上（`node_modules` の匿名ボリューム） | 上と同じ。それでも駄目なら `docker compose down -v` |
 | API が `could not translate host name "db"` | `api` が `db` より先に起動した | `depends_on` の `service_healthy` が入っているか確認 |
 | ブラウザから `localhost:5173` が開けない | Vite が `0.0.0.0` に bind していない | `command` の `--host 0.0.0.0` を確認 |
 | `/api/...` が 404 | Vite の proxy が効いていない | `vite.config.ts` の `proxy.target` と `docker compose logs api` を確認 |

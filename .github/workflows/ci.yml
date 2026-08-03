@@ -1,0 +1,108 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: test_db
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+
+    env:
+      DJANGO_SETTINGS_MODULE: config.settings.local
+      # 32 文字以上であること（HS256 の署名強度。docs/00-decisions.md）
+      DJANGO_SECRET_KEY: ci-only-insecure-key-not-used-anywhere-0001
+      DATABASE_URL: postgres://postgres:postgres@localhost:5432/test_db
+      GOOGLE_OAUTH_CLIENT_ID: dummy-client-id.apps.googleusercontent.com
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+          cache-dependency-glob: backend/uv.lock
+
+      - name: Install dependencies
+        run: uv sync --frozen # ロック通りに入れる。ローカルと同じ構成を保証
+
+      - name: Lint
+        run: uv run ruff check .
+
+      - name: Format check
+        run: uv run ruff format --check .
+
+      # モデルを変えたのにマイグレーションを作り忘れた PR を落とす。
+      # 地味だが一番効くステップ。
+      - name: Migrations are up to date
+        run: uv run python manage.py makemigrations --check --dry-run
+
+      - name: Test
+        run: uv run pytest -q
+
+  frontend:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - run: npm ci
+
+      - name: Lint
+        run: npm run lint
+
+      # vite dev は型エラーがあっても動くので、ここで型を見る
+      - name: Build
+        run: npm run build
+        env:
+          VITE_API_BASE_URL: https://example.invalid # 通ることの確認だけ
+          VITE_GOOGLE_OAUTH_CLIENT_ID: dummy
+
+  deploy:
+    needs: [backend, frontend]
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    runs-on: ubuntu-latest
+
+    steps:
+      # -f を付けないと 4xx でも curl が成功扱いになり、失敗が緑になる
+      - name: Deploy API
+        run: curl -fsS -X POST "$HOOK"
+        env:
+          HOOK: ${{ secrets.RENDER_DEPLOY_HOOK_API }}
+
+      - name: Deploy Frontend
+        run: curl -fsS -X POST "$HOOK"
+        env:
+          HOOK: ${{ secrets.RENDER_DEPLOY_HOOK_WEB }}

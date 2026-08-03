@@ -76,17 +76,38 @@ LTS（5.2、2028-04 まで）を採る手もあったが、**今回は「Django 
 
 未対応の表明がないのは **Django 6.0 のみ**で、これは「動かない」ではなく「upstream がまだテストしていない」状態。JWT ライブラリが触る Django の API は比較的安定した領域なので、そのまま動く公算が高い。
 
-### Day 1 で一応確認すること（リスクとしては解消済み）
+### ✅ 実測で確認済み（2026-08-03 / Day 1）
 
-上記の調査で「動くはず」までは確定したが、**推論であって実測ではない**ので、Day 1 に 5 分だけ手を動かして確かめる。
+推論だけで終わらせず、実際にインストールして端から端まで動かした。**結果は問題なし。**
 
-```bash
-uv add "django~=6.0" djangorestframework djangorestframework-simplejwt
-uv run python -c "import rest_framework_simplejwt as s; print(s.__version__)"
-uv run python manage.py check
+```
+Django 6.0.7 / DRF 3.17.1 / simplejwt 5.5.1
+
+access token 発行        len=231        ✅
+token → user 復元        match=True     ✅  JWTAuthentication 経由
+blacklist                rows=1         ✅  ROTATE + BLACKLIST 有効
 ```
 
-**万一動かなかった場合は PyJWT で自前実装に切り替える。** Django のバージョンは下げない。
+依存解決も 28 パッケージが衝突なしで解決した。**PyJWT 自前実装への切り替えは不要。**
+
+### 実測で分かった追加の制約: `SECRET_KEY` は 32 バイト以上
+
+検証中、PyJWT 2.13 が次の警告を出した。
+
+```
+InsecureKeyLengthWarning: The HMAC key is 29 bytes long,
+below the minimum recommended length of 32 bytes for SHA256
+```
+
+HS256 で署名する以上、**`DJANGO_SECRET_KEY` は 32 バイト以上必要**。
+
+| 環境 | 対応 |
+|---|---|
+| ローカル | `docker-compose.yml` に書く開発用の値も **32 文字以上**にする |
+| 本番 | `render.yaml` の `generateValue: true` が生成する値は十分な長さ |
+| Django 標準 | `get_random_secret_key()` は 50 文字なので問題なし |
+
+**短い値を置くと警告が出続けるだけでなく、署名強度が推奨を下回る。**
 
 | | 内容 |
 |---|---|

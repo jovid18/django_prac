@@ -1,0 +1,69 @@
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: django_prac
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    ports:
+      # ホストの GUI クライアントから覗く用。ホスト側で 5432 が
+      # 埋まっていることが多いので 5433 に逃がしてある。
+      - "5433:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d django_prac"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  api:
+    build:
+      context: ./backend
+      # ruff / pytest を含むステージ。本番（Render）は target 未指定で prod になる。
+      target: dev
+    command: python manage.py runserver 0.0.0.0:8000
+    environment:
+      DJANGO_SETTINGS_MODULE: config.settings.local
+      # 開発専用。本番は Render が generateValue で生成する。
+      # HS256 の都合で 32 文字以上必要（docs/00-decisions.md）。
+      DJANGO_SECRET_KEY: dev-only-insecure-key-do-not-use-in-production-0001
+      DATABASE_URL: postgres://postgres:postgres@db:5432/django_prac
+      CORS_ALLOWED_ORIGINS: http://localhost:5173
+      GOOGLE_OAUTH_CLIENT_ID: ${GOOGLE_OAUTH_CLIENT_ID:-}
+    volumes:
+      # ホットリロードのためソースをマウントする。
+      # .venv はイメージ内のものを使うので匿名ボリュームで保護する。
+      - ./backend:/app
+      - /app/.venv
+    ports:
+      # ホスト側 8001。8000 は別プロジェクトのコンテナが使っていることがある。
+      # コンテナ内は 8000 のままなので、web からの proxy 先 api:8000 は変わらない。
+      - "8001:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+
+  web:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile.dev
+    command: npm run dev -- --host 0.0.0.0
+    environment:
+      # 空 = 相対パス。Vite の proxy が /api を api:8000 に転送する。
+      VITE_API_BASE_URL: ""
+      VITE_GOOGLE_OAUTH_CLIENT_ID: ${GOOGLE_OAUTH_CLIENT_ID:-}
+      VITE_PROXY_TARGET: http://api:8000
+    volumes:
+      - ./frontend:/app
+      # これが無いと、ホストの frontend/ をマウントした瞬間に
+      # コンテナ内の node_modules が消える。Node の Docker 開発で
+      # 一番ハマる箇所。
+      - /app/node_modules
+    ports:
+      - "5173:5173"
+    depends_on:
+      - api
+
+volumes:
+  pgdata:

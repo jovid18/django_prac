@@ -29,30 +29,33 @@
 
 ### backend
 
-- [ ] **★ 最優先: simplejwt × Django 6.0 の動作検証**（`00-decisions.md`）。駄目なら PyJWT 自前実装に切り替える
-- [ ] `backend/` に Django プロジェクトを作る（`config` 名で）
-- [ ] `config/settings/{base,local,production}.py` に分割
-- [ ] **`apps/accounts` を作り、カスタム `User` を定義する（`migrate` の前に！）**
-- [ ] `apps/core` に `GET /api/health/` だけ作る
-- [ ] `Dockerfile` を書く
-- [ ] `pyproject.toml` に依存を書く
+- [x] **★ 最優先: simplejwt × Django 6.0 の動作検証** → **合格**（トークン発行・検証・ブラックリストまで実測。`00-decisions.md`）
+- [x] `backend/` に Django プロジェクトを作る（`config` 名で）
+- [x] `config/settings/{base,local,production}.py` に分割
+- [x] **`apps/accounts` を作り、カスタム `User` を定義する（`migrate` の前に！）**
+- [x] `apps/core` に `GET /api/health/` だけ作る
+- [x] `Dockerfile` を書く（dev / prod のマルチステージ）
+- [x] `pyproject.toml` に依存を書く（`uv.lock` を commit）
+- [x] `ruff` / `pytest` が通る（9 tests passed）
 
 ### frontend
 
-- [ ] `npm create vite@latest frontend -- --template react-ts`
-- [ ] `Dockerfile.dev` と `vite.config.ts`（proxy 設定）
-- [ ] 画面は「API の health を叩いて結果を出すだけ」でよい
+- [x] `npm create vite@latest frontend -- --template react-ts`
+- [x] `Dockerfile.dev` と `vite.config.ts`（proxy 設定）
+- [x] 画面は「API の health を叩いて結果を出すだけ」
+- [x] `npm run build` / `npm run lint`（oxlint）が通る
 
 ### 環境
 
-- [ ] `docker-compose.yml` を書く
-- [ ] `docker compose up` でブラウザに health の結果が出る
-- [ ] `.env.example` を書く
-- [ ] `.gitignore` を確認（`.env`、`__pycache__`、`node_modules`、`staticfiles` など）
+- [x] `docker-compose.yml` を書く
+- [x] `docker compose up` で 3 サービスが起動する
+- [x] **`localhost:5173/api/health/` が 200**（Vite proxy → Django が通っている）
+- [x] `.env.example` を書く / `.env` に Google クライアント ID を投入
+- [x] `.gitignore` を確認（`.env`、`*.sqlite3`、`staticfiles/` を追加）
 
-### デプロイ
+### デプロイ ← ★ ここから
 
-- [ ] `render.yaml` を書く
+- [x] `render.yaml` を書く
 - [ ] Blueprint でデプロイ
 - [ ] **`08-deploy-render.md` の初回デプロイ手順 4〜8 を実施**（URL 確定後の環境変数入力）
 - [ ] 本番 URL でフロントが API の health を叩けることを確認 ← **ここが Day 1 のゴール**
@@ -60,7 +63,7 @@
 
 ### CI
 
-- [ ] `.github/workflows/ci.yml` を置く
+- [x] `.github/workflows/ci.yml` を置く
 - [ ] Deploy Hook を Secrets に登録
 - [ ] `main` にブランチ保護をかける
 - [ ] 適当な PR を出して CI が緑になることを確認

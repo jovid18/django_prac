@@ -5,11 +5,21 @@
 ```bash
 npm create vite@latest frontend -- --template react-ts
 cd frontend
-npm install
-npm install react-router maplibre-gl react-map-gl @tanstack/react-query
+npm install react-router maplibre-gl react-map-gl @tanstack/react-query zod
 ```
 
 > **`create-react-app` は使わない。** メンテナンスが止まっており、ビルドも遅い。Vite の `react-ts` テンプレートから始める。
+
+**テンプレートが実際に生成したもの（2026-08 / create-vite 9.1.2）**
+
+| | |
+|---|---|
+| React | 19.2.8 |
+| Vite | 8.2.0 |
+| TypeScript | 6.0 |
+| Lint | **oxlint**（eslint ではない） |
+
+`create-vite` の既定が **oxlint** に変わっている。Rust 製で eslint より大幅に速く、設定は `.oxlintrc.json`、実行は `npm run lint`。**eslint に差し替えず、このまま使う。**
 
 ## ディレクトリ構成
 

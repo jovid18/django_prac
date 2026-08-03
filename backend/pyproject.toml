@@ -1,0 +1,46 @@
+[project]
+name = "django-prac-backend"
+version = "0.1.0"
+description = "東京都の図書館マップ — Django API"
+requires-python = ">=3.13,<3.14"
+
+# バージョン指定は「理由があるものだけ」に付ける。
+# それ以外は uv に解決させ、実際に入った版は uv.lock で固定する。
+dependencies = [
+    "django~=6.0",              # 00-decisions.md で 6.0 系に確定
+    "djangorestframework",
+    "djangorestframework-simplejwt",
+    "django-cors-headers",
+    "dj-database-url",          # DATABASE_URL 一本で接続情報を扱う
+    "psycopg[binary]",          # PostgreSQL ドライバ v3
+    "gunicorn",                 # 本番の WSGI サーバ
+    "whitenoise",               # Django Admin の静的ファイル
+    "google-auth",              # Google ID トークンの検証
+]
+
+[dependency-groups]
+dev = [
+    "pytest",
+    "pytest-django",
+    "ruff",
+]
+
+# これはライブラリではなくアプリケーションなので、
+# プロジェクト自身をビルド・インストールの対象にしない。
+[tool.uv]
+package = false
+
+[tool.ruff]
+line-length = 100
+target-version = "py313"
+# マイグレーションは Django が自動生成するファイルなので lint 対象から外す。
+# 生成物に手を入れて行長を直すのは本末転倒。
+extend-exclude = ["*/migrations/*"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "DJ"]
+
+[tool.pytest.ini_options]
+DJANGO_SETTINGS_MODULE = "config.settings.local"
+python_files = ["test_*.py", "*_test.py"]
+testpaths = ["apps"]
