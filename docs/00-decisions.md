@@ -287,7 +287,7 @@ Render には[公式の Terraform プロバイダ](https://render.com/docs/terra
 | Terraform | **使わない**（上記） |
 | Render のリージョン | Blueprint に `singapore` と書いているが、作成時に選択肢を確認する |
 | E2E テスト（Playwright） | Should。Day 5 に余裕があれば |
-| `drf-spectacular` | 任意。入れるなら Day 2 |
+| `drf-spectacular` | **入れない**（Day 5 に決定。理由は `05-api.md`「API ドキュメントの自動生成はしない」）。手書きの `APIView` が多く、ほぼ全エンドポイントに `@extend_schema` を書く必要があって自動生成の利点が消える |
 
 ## 変更履歴
 
@@ -298,5 +298,8 @@ Render には[公式の Terraform プロバイダ](https://render.com/docs/terra
 | 2026-08-03 | **地図を MapLibre + 地理院タイル → Google Maps に変更。** 候補を実際に並べて描画した結果、見た目を優先。キーと課金アカウントが必要になる点を受け入れた（上の節） |
 | 2026-08-03 | `frontend/tsconfig.app.json` に **`strict: true` を追加**。文書には「テンプレートで有効」と書いていたが実際には入っていなかった |
 | 2026-08-03 | Day 4。依存を `google-auth` → **`google-auth[requests]`** に変更。素の `google-auth` は HTTP クライアントを同梱しておらず、`google.auth.transport.requests` が `ModuleNotFoundError` になる（`06-auth.md`） |
+| 2026-08-03 | Day 5。**`drf-spectacular` を「任意」から「入れない」に変更。** 手書きの `APIView` が多く、ほぼ全エンドポイントに `@extend_schema` が必要で自動生成の利点が消える。`05-api.md` を正とする |
+| 2026-08-03 | Day 5。`nearby` の距離計算を **余弦定理（`acos`）→ haversine（`atan2`）に変更。** `04-data-model.md` に載せていた SQL が誤りだった。`acos` を 1 の近くで使うと ① 誤差で定義域を外れて Postgres が `DataError` = 500（490 件中 5 件で再現）② 同一点の距離が 0 にならない（0.1343m）。**PostGIS を使えば起きなかった問題**なので、Won't 表のコストに「数値計算を自分で正しく書く責任」を追記した（`04-data-model.md` / `01-overview.md`） |
+| 2026-08-03 | Day 5。`nearby` の UI を当初案の「ボタンを無効化して案内文」から **「ボタンは押せるままにしてパネル側に案内文」** に変更。押せないボタンは理由が伝わらないため（`07-frontend.md`） |
 | 2026-08-03 | Day 4。`docs/05-api.md` の「日時は UTC / `Z`」を **「`+09:00` オフセット付き」に訂正**。`TIME_ZONE = "Asia/Tokyo"` かつ `USE_TZ = True` のとき DRF は現在のタイムゾーンで描画し、出力タイムゾーンを変える設定は DRF に無い。実装に合わせた |
 | 2026-08-03 | Day 4。**地図の周りにエラーバウンダリを追加**（`MapErrorBoundary.tsx`）。リファラー制限違反を実際に起こしたところ、壊れた地図の上で `<AdvancedMarker>` が例外を投げ、React 19 が**アプリのツリー全体を unmount**した（`07-frontend.md`） |

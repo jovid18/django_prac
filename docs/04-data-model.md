@@ -256,26 +256,67 @@ qs = qs[:LIMIT]                   # LIMIT は 500 程度
 
 `(latitude, longitude)` の複合インデックスが効く。数十件〜数千件の規模ならこれで十分速い。
 
-### 近い順（Should 機能）
+### 近い順（実装済み）
 
-Haversine を SQL 側で計算する。ORM で書くなら `RawSQL` か `Func` を使う。
+距離を SQL 側で計算する。実装は `apps/libraries/geo.py`。**`RawSQL` ではなく `Func`**（`ATan2` / `Sqrt` / `Cos` / `Sin` / `Radians`）で組んだ —— 値のバインドを Django に任せて文字列連結を一切しないため。
+
+**採用したのは haversine 公式を `atan2` で解く形。** 当初このページに書いていた「余弦定理 + `acos`」は**捨てた**（理由は下）。
 
 ```sql
--- 概念。実装時は必ずプレースホルダでバインドする
+-- 実際に生成される式の骨格
 SELECT *,
-       6371000 * acos(
-         cos(radians(%(lat)s)) * cos(radians(latitude)) *
-         cos(radians(longitude) - radians(%(lng)s)) +
-         sin(radians(%(lat)s)) * sin(radians(latitude))
-       ) AS distance_m
+       2 * 6371008.8 * atan2(sqrt(a), sqrt(1 - a)) AS distance_m
+       -- a = sin²(Δφ/2) + cos(φ1)cos(φ2)sin²(Δλ/2)
 FROM libraries_library
 WHERE latitude BETWEEN %(min_lat)s AND %(max_lat)s   -- ← 先に bbox で絞る（重要）
   AND longitude BETWEEN %(min_lng)s AND %(max_lng)s
-ORDER BY distance_m
-LIMIT 50;
+  AND distance_m <= %(radius_m)s                     -- 外接矩形の角を落とす
+ORDER BY distance_m, id
+LIMIT 20;
 ```
 
 **必ず bbox で絞ってから距離計算する。** いきなり全行に対して三角関数を回すとインデックスが使えない。
+
+> ### ⚠ 余弦定理（`acos`）で書いていたのを撤回した（Day 5）
+>
+> **このページに最初に載せていた SQL は間違っていた。** `acos` を 1 の近くで使う形になり、
+> 問題が 2 つあった。どちらも「`acos` を 1 の近くで使う」ことに起因する。
+>
+> **1. 定義域を外れて 500 になる。**
+> 数学的には `cos(φ1)cos(φ2)cos(Δλ) + sin(φ1)sin(φ2)` が 1 を超えないが、
+> **浮動小数の誤差で超える。** Postgres の `acos` は NaN を返さず
+> `DataError: input is out of range` を投げるのでそのまま 500。
+> シードの 490 件で基準点を各館の座標そのものにすると、**5 件**で
+> `1.0000000000000002` になった（世田谷区立烏山図書館 `35.668836, 139.600528` で再現）。
+>
+> **2. 距離 0 が 0 にならない。**
+> `acos` は 1 の近くで傾きが発散するので精度が落ちる。Postgres で計測すると
+> **同一点で `0.1343m`** が出た。
+>
+> | 公式 | 同一点での結果（490 件の最大値） |
+> |---|---|
+> | 余弦定理 + `acos` | **0.1343m**（うち 5 件は定義域外で `DataError`） |
+> | haversine + `atan2` | **0.0000m** |
+>
+> **「現在地の真上にある館」は現実に起こる**ので実害がある。
+> `test_base_point_on_top_of_a_library_is_exactly_zero` と
+> `test_zero_distance_has_no_rounding_floor` で固定した。
+>
+> 精度そのものは実用上どちらでも足りる（1km 地点での差は 1mm 未満を実測）。
+> **問題は「距離 0 付近」だけに出る。**
+>
+> #### PostGIS ならこれは起きなかった
+>
+> `ST_Distance` / `ST_DWithin`（`geography` 型）は測地線アルゴリズムで実装されていて、
+> **`acos` を自分で書く場面が無い。** つまりこれは
+> **「PostGIS を入れない」判断が連れてきたコスト**で、
+> `01-overview.md` の Won't 表に書いていた「GDAL/GEOS を入れる手間 vs bbox で十分」
+> という比較には入っていなかった項目。
+>
+> 判断そのものは変えない（490 件で bbox + haversine は十分速く、正しく動いている）。
+> ただし**コストの見積りに「数値計算を自分で正しく書く責任」を足しておく。**
+
+`radius_m` / `limit` の上限超えは **400 にせず黙って頭打ちにする**（`radius_m` は 20km、`limit` は 50）。一覧の `limit` と揃えた方針。一方 `lat` / `lng` の**欠落は 400** —— 黙って都全域を返すと「現在地が取れていない」ことがフロントの不具合として現れなくなる。
 
 ### PostGIS へのアップグレード経路（今回はやらない）
 

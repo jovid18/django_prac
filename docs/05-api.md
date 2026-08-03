@@ -56,7 +56,7 @@ DRF のデフォルトに乗せつつ、形を 1 つに統一する。
 | `GET` | `/api/auth/me/` | 必要 | 自分の情報 |
 | `GET` | `/api/libraries/` | 不要 | 図書館の一覧・検索（bbox / フィルタ） |
 | `GET` | `/api/libraries/{id}/` | 不要 | 図書館の詳細 |
-| `GET` | `/api/libraries/nearby/` | 不要 | 現在地から近い順（Should・未実装） |
+| `GET` | `/api/libraries/nearby/` | 不要 | 現在地から近い順 |
 | `POST` | `/api/libraries/{id}/favorite/` | 必要 | お気に入り登録 |
 | `DELETE` | `/api/libraries/{id}/favorite/` | 必要 | お気に入り解除 |
 | `GET` | `/api/favorites/` | 必要 | お気に入り一覧 |
@@ -239,7 +239,7 @@ GET /api/libraries/?bbox=139.68,35.66,139.78,35.72&smoking=both,heated_only
 }
 ```
 
-### `GET /api/libraries/nearby/`（Should）
+### `GET /api/libraries/nearby/`
 
 | パラメータ | 必須 | 説明 |
 |---|---|---|
@@ -258,7 +258,16 @@ GET /api/libraries/?bbox=139.68,35.66,139.78,35.72&smoking=both,heated_only
 }
 ```
 
-- `lat` / `lng` が無ければ `400`。**現在地が取れないときにフロントがこれを呼ばない**のが前提（`07-frontend.md`）。
+**設計上の決めごと**
+
+- `lat` / `lng` が無ければ `400`。**現在地が取れないときにフロントがこれを呼ばない**のが前提（`07-frontend.md`）。黙って都全域を返すと「現在地が取れていない」ことがフロントの不具合として現れなくなる。範囲外（`lat` が ±90 超など）も `400`。
+- 一方 **`radius_m` / `limit` の上限超えは `400` にせず頭打ち**（20km / 50 件）。一覧の `limit` と揃えた方針。
+- `distance_m` は**メートル単位の整数**。球面近似の誤差が 0.5% 程度あるので小数を返す意味が無い。
+- `smoking` は一覧と同じように効く。掛けないとフィルタで除外した館が結果から選べてしまい、地図と食い違う。
+- `truncated` は返さない。件数は `radius_m` と `limit` で決まり、`bbox` のような「画面外が切れた」概念が無い。
+- 並びは距離昇順。**同距離での揺れを防ぐため `id` を第 2 キー**に入れている。
+- ⚠ 距離は **haversine + `atan2`** で計算している。当初計画の「余弦定理 + `acos`」は、距離 0 付近で **500 になる / 0 が 0 にならない**の 2 点があって撤回した。実測は `04-data-model.md`。
+- ⚠ ルータの都合で、このアクションは `libraries/{pk}/` より**前**にマッチする必要がある（`{pk}` の正規表現は `nearby` にも当たる）。DRF の `SimpleRouter` が `detail=False` のアクションを detail ルートより先に並べるのでそのままで正しいが、**テストで固定してある**。
 
 ### `POST` / `DELETE /api/libraries/{id}/favorite/`
 
@@ -329,16 +338,19 @@ urlpatterns = [
 
 `libraries` は `ViewSet` + `DefaultRouter` にすると `nearby` を `@action(detail=False)`、`favorite` を `@action(detail=True, methods=["post", "delete"])` で素直に書ける。
 
-## API ドキュメントの自動生成（任意だが推奨）
+## API ドキュメントの自動生成はしない
 
-`drf-spectacular` を入れると OpenAPI スキーマと Swagger UI が生えて、フロント実装時に手元で叩けるようになる。
+`drf-spectacular`（OpenAPI スキーマ + Swagger UI の自動生成）を候補に挙げていたが、**入れない**ことにした。
 
-```
-/api/schema/          → OpenAPI YAML
-/api/schema/swagger/   → Swagger UI（DEBUG 時のみ公開）
-```
+自動推論が効くのは **serializer に素直に乗った ViewSet** のとき。この API はそうなっていない:
 
-**本番では Swagger UI を出さない**（`DEBUG` で分岐する）。
+- 認証系（`register` / `login` / `google` / `refresh` / `logout` / `me`）は全て手書きの `APIView` で、レスポンス本文を `{"user": ..., "access": ...}` の形に自分で組み立てている
+- `libraries` の一覧は `{"count", "truncated", "results"}` を直接返す（serializer はこの外側の形を知らない）
+- `favorite` は `{"is_favorited": true}` のリテラル、`favorites` / `nearby` も同様
+
+つまり**ほぼ全てのエンドポイントに `@extend_schema` を手で書く**ことになり、「自動生成」の利点が消える。そのうえこのファイル（実物と合わせて管理している）と二重管理になる。**この文書を正とする。**
+
+> 手を動かして OpenAPI を経験する価値はあるので、元プロジェクト側で必要になったら改めて検討する。
 
 ## テストの最低ライン
 
@@ -355,6 +367,7 @@ urlpatterns = [
 | libraries 詳細 | 存在しない id で `404` |
 | favorite | 未ログインで `401` / 二重 POST が冪等 / 未登録の DELETE が `204` / 他人の行を消さない |
 | favorites 一覧 | 未ログインで `401` / **自分の行だけ**返る / 新しい順 / `address` と `favorited_at` が入る |
+| nearby | `lat` / `lng` 欠落と範囲外で `400` / 距離順 / `distance_m` の桁が妥当 / `radius_m` で絞れる / 上限は頭打ち / **基準点が館の座標と一致したとき距離が厳密に 0**（500 にならない・下駄を履かない） / `libraries/{pk}/` に食われない |
 
 > **お気に入りのテストは JWT を直接発行する**（`RefreshToken.for_user`）。
 > `client.force_login` は使えない（API に SessionAuthentication を入れていない）し、

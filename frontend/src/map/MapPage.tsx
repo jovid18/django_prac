@@ -12,6 +12,7 @@ import styles from './MapPage.module.css'
 import { MapPlaceholder, MapView, type MapViewState } from './MapView'
 import { SearchBox } from './SearchBox'
 import { SmokingFilter } from './SmokingFilter'
+import { useGeolocation } from './useGeolocation'
 import { MIN_FETCH_ZOOM, useLibraries } from './useLibraries'
 import { useMapsAuthFailure } from './useMapsAuthFailure'
 
@@ -24,6 +25,10 @@ export function MapPage() {
   const [map, setMap] = useState<google.maps.Map | null>(null)
   // キーのリファラー制限違反・請求先無効など。地図は出ないが API は動く。
   const mapAuthFailed = useMapsAuthFailure()
+  // ★ 現在地はここで 1 回だけ取る。現在地ボタン（地図の内側）と
+  //   「近い順」（地図の外側）が同じ状態を見る必要があり、それぞれが
+  //   フックを呼ぶと許可を 2 回求めることになる。
+  const geo = useGeolocation()
 
   const { data, isFetching, isError, refetch, zoomTooLow } = useLibraries(view, smoking)
   const items = data?.results ?? []
@@ -51,13 +56,13 @@ export function MapPage() {
               onSelect={setSelected}
             />
             <MapControl position={ControlPosition.RIGHT_BOTTOM}>
-              <LocateControl />
+              <LocateControl geo={geo} />
             </MapControl>
           </MapArea>
         </MapErrorBoundary>
 
         <div className={styles.overlayLeft}>
-          <SearchBox smoking={smoking} map={map} onSelect={setSelected} />
+          <SearchBox smoking={smoking} map={map} geo={geo} onSelect={setSelected} />
           <SmokingFilter value={smoking} onChange={setSmoking} />
         </div>
 

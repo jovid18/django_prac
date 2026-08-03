@@ -39,6 +39,16 @@ export type LibraryDetail = LibraryListItem & {
   updated_at: string
 }
 
+/** `nearby` の 1 件。一覧の項目に基準点からの距離（メートル、整数）が付く。 */
+export type NearbyItem = LibraryListItem & {
+  distance_m: number
+}
+
+export type NearbyListResponse = {
+  count: number
+  results: NearbyItem[]
+}
+
 /**
  * お気に入り一覧の 1 件。
  *

@@ -15,7 +15,20 @@ export type GeoState =
   /** HTTPS でない / 非対応ブラウザ / タイムアウト */
   | { status: 'unavailable' }
 
-export function useGeolocation() {
+/**
+ * 現在地の状態と取得のトリガ。
+ *
+ * ★ この型を切っているのは、**フックを `MapPage` で 1 回だけ呼んで
+ *   結果を配る**ため。現在地ボタン（地図の内側）と「近い順」（地図の外側）の
+ *   両方が同じ状態を見る必要があり、それぞれがフックを呼ぶと許可を 2 回求める
+ *   ことになる（docs/07-frontend.md）。
+ */
+export type Geolocation = {
+  state: GeoState
+  request: () => void
+}
+
+export function useGeolocation(): Geolocation {
   const [state, setState] = useState<GeoState>({ status: 'idle' })
 
   const request = useCallback(() => {

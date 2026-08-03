@@ -245,6 +245,21 @@ docker compose exec db psql -U postgres -d django_prac
 | 地図が真っ白 | Maps のキーが無い / 制限に弾かれた / 課金未設定 | DevTools の Console を見る。`InvalidKeyMapError`（キー未設定）/ `RefererNotAllowedMapError`（リファラー制限に `http://localhost:5173/*` が無い）/ `BillingNotEnabledMapError`（課金未設定） |
 | 地図が潰れて線になる | 親要素の高さが 0 | `<Map>` の親に高さを与える（`height: 100dvh` など） |
 | **ファイルを削除した瞬間に `web` が落ちる** | Vite 8 の dev server が HMR 中の削除で `ENOENT` を unhandled error にして exit する | `docker compose up -d web` で起こし直す。作業ファイルを消すときは dev server を止めてからのほうが安全 |
+| **ソースを直したのにブラウザに反映されない**（リロードしてもキャッシュを消しても古いまま） | バインドマウント越しの inotify を dev server が取りこぼし、**Vite の変換キャッシュが無効化されない。** ファイル自体はコンテナ内でも新しい | `docker compose restart web`。判定は下記のワンライナー |
+
+**「反映されない」ときの切り分け。** ホスト・コンテナ・dev server が返す中身の
+どこで食い違っているかを見る（`<文字列>` は入れたはずの変更）。
+
+```bash
+grep -c '<文字列>' frontend/src/map/SearchBox.tsx                        # ホスト
+docker compose exec -T web grep -c '<文字列>' /app/src/map/SearchBox.tsx  # コンテナ
+curl -s localhost:5173/src/map/SearchBox.tsx | grep -c '<文字列>'         # dev server が返すもの
+```
+
+**コンテナまでは新しいのに dev server だけ古い**なら変換キャッシュ。`restart web` で直る。
+コンテナが古いならマウントの問題（`volumes` を確認）。
+ブラウザのハードリロードでは直らないので、**この確認をせずに「コードが間違っている」と
+疑い始めると時間を溶かす。** Day 5 に実際に踏んだ。
 
 ## `.env.example`（リポジトリに commit するもの）
 
