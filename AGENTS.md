@@ -43,7 +43,7 @@ Claude Code / Codex のどちらから開いても、まずこれを読む。
 ### 環境
 
 ```bash
-cp .env.example .env          # GOOGLE_OAUTH_CLIENT_ID を入れる
+cp .env.example .env          # GOOGLE_OAUTH_CLIENT_ID と GOOGLE_MAPS_API_KEY を入れる
 docker compose up --build
 docker compose exec api python manage.py migrate
 docker compose exec api python manage.py loaddata libraries
@@ -91,7 +91,7 @@ docker compose exec -T web npm run build
 | バックエンド | Django 6.0 + DRF 3.17（Python 3.13） |
 | Python 依存管理 | **uv**（`uv.lock` を commit する） |
 | DB | PostgreSQL 16 |
-| 地図 | MapLibre GL JS + 国土地理院タイル |
+| 地図 | **Google Maps JavaScript API**（`@vis.gl/react-google-maps` + `supercluster`）<br>⚠ API キーは公開値だが**課金に直結する**。リファラー制限と Quotas の日次上限を必ず掛ける |
 | 認証 | JWT（access はメモリ / refresh は HttpOnly Cookie）+ Google ID トークン検証 |
 | デプロイ | Render（Static Site + Web Service + Postgres） |
 
@@ -104,8 +104,12 @@ docker compose exec -T web npm run build
   「なぜこうなっているのか」を後から git log で追えるようにする。
 - **踏んだ落とし穴はドキュメントに残す。** 実例は `docs/08-deploy-render.md` の
   「ヘルスチェックと HTTPS リダイレクトの衝突」。
-- **外部データの出典表示を守る。** 図書館データは OpenStreetMap（ODbL）、
-  地図タイルは国土地理院。どちらも表示義務がある。
+- **外部データの出典表示を守る。** 図書館データは OpenStreetMap（ODbL）で、**表示義務がある**。
+  自分で画面に出す必要がある（Google の地図側のロゴ・著作権表示は自動で出るので、それを隠さない）。
+- **Maps の API キーを晒さない・制限を外さない。** バンドルに埋まる値なので隠しきれない前提で、
+  Cloud Console 側の「HTTP リファラー制限 + Maps JavaScript API のみ」+ **Quotas の日次上限**で守る。
+- **地図の課金単位は「map load（地図インスタンスの生成回数）」。** ドラッグ・ズーム・タイル取得は課金されない。
+  **タイルを CDN でキャッシュしても節約にならず、そもそも規約で禁止**（`docs/07-frontend.md`）。
 
 ## ドキュメント
 

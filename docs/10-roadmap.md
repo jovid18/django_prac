@@ -15,10 +15,21 @@
 - [x] フロントのバージョンを決める → **React 19.2 / Vite 8 / Node 22 LTS**
 - [x] **無料 Postgres の条件を確認** → 30 日で失効 + 14 日猶予 / 1 GB / アカウントに 1 個 / バックアップ無し
 - [x] GitHub にリポジトリを push する
-- [ ] **Google Cloud Console で OAuth クライアント ID を作る** ← 手作業（`06-auth.md`）
+- [x] **Google Cloud Console で OAuth クライアント ID を作る** ← 手作業（`06-auth.md`）
       - 承認済み JavaScript 生成元に `http://localhost:5173` を登録
-      - **本番 URL はまだ分からないので後で追加する**（Day 1 の宿題としてメモ）
-- [ ] **Render のアカウントを作る** ← 手作業。GitHub アカウントで sign up してリポジトリへのアクセスを許可する
+      - 本番 URL は Day 1 で確定してから追加した
+- [x] **Render のアカウントを作る** ← 手作業。GitHub アカウントで sign up してリポジトリへのアクセスを許可する
+- [ ] **Google Maps の API キーと Map ID を用意する** ← 手作業。**Day 3 の前提**（`00-decisions.md`）
+      - OAuth と**同じ Cloud プロジェクト**で「Maps JavaScript API」を有効化する
+        （プロジェクト ID: **`django-prac-504402`** / 表示名は `django-prac`。
+        コンソールの URL に `?project=django-prac-504402` を付けると迷わない。
+        有効化するサービス名は **`maps-backend.googleapis.com`**（名前が一致しないので探しにくい））
+      - **課金アカウントの登録が必要**（無料枠の内側でも必須）
+      - キーを作ったら**必ず制限を掛ける**: アプリケーションの制限 = HTTP リファラー
+        （`http://localhost:5173/*` と本番の Static Site URL）/ API の制限 = Maps JavaScript API のみ
+      - `.env` に `GOOGLE_MAPS_API_KEY` を入れる。`GOOGLE_MAPS_MAP_ID` は空でよい（`DEMO_MAP_ID` にフォールバックする）
+      - **Quotas で日次上限（300/日 程度）を掛ける。** キーが漏れても請求ではなくエラーで止まる
+      - 予算アラートも設定しておく（こちらは事後通知）
 
 > **リスクは調査済み**: `djangorestframework-simplejwt` の Django 6.0 対応は upstream の master にマージ済み（アプリコードの変更は 0 行）で、依存指定にも上限がない。**PyPI の 5.5.1 をそのまま使ってよい。**
 > ただし推論なので、Day 1 に 5 分だけ実測する（`00-decisions.md`）。
@@ -77,8 +88,11 @@
 
 - [x] `.github/workflows/ci.yml` を置く
 - [x] Deploy Hook を Secrets に登録
-- [ ] `main` にブランチ保護をかける
-- [ ] PR を出して CI が緑になることを確認
+- [x] `main` にブランチ保護をかける
+      → 実体は**旧来の branch protection ではなく ruleset**（`main-protection` / enforcement: active）。
+        `gh api repos/{owner}/{repo}/branches/main/protection` は 404 を返すので、
+        確認するときは `gh api repos/{owner}/{repo}/rulesets` を見る
+- [x] PR を出して CI が緑になることを確認（PR #1〜#3 を squash merge 済み）
 
 > **Day 1 が終わった時点で、残りは「機能を足す」だけになる。** インフラ由来の問題はここで全部踏んである。
 
@@ -114,15 +128,46 @@
 
 ## Day 3 — 地図
 
-- [ ] MapLibre + GSI タイルで地図を表示する
-- [ ] `moveend` で bbox を取り、API を叩く（React Query）
-- [ ] マーカーを喫煙区分で色分けして表示
-- [ ] マーカークリック → 詳細パネル
-- [ ] **喫煙区分がダミーデータである旨の注記を出す**
-- [ ] 喫煙区分フィルタ UI
-- [ ] `truncated` / 0 件 / エラー / ローディングの表示
-- [ ] 現在地ボタン（`useGeolocation`）
-      - [ ] **拒否されても地図が壊れないことを実際に試す**（ブラウザの設定で拒否して確認）
+> **当初は MapLibre + 地理院タイルの計画だったが、Google Maps に変更した。**
+> 候補を実際に描画して比べた結果と、受け入れたコストは `00-decisions.md` の「地図」の節。
+> **API キーが無いと地図が出ない**ので、Day 0 の宿題（キー + 制限）を先に済ませる。
+
+- [x] `APIProvider` を巻く（キーは `env.googleMapsApiKey`）
+      → **`main.tsx` ではなく `MapPage` に置いた。** マウントした時点で Maps JS の読み込みが
+        始まるので、地図が無い画面にまで巻くと無駄な map load になる
+- [x] `<Map>` で地図を表示する（`mapId` / `defaultCenter` = 東京駅 / `minZoom: 9` / `gestureHandling: greedy` / `reuseMaps`）
+      - [x] **親要素の高さを確定させる** → `index.css` の `main { max-width }` が地図の `<main>` に
+            当たって**幅が 0 になり真っ白**になった。要素セレクタでレイアウトを決めない（`07-frontend.md`）
+      - [x] `language="ja"` / `region="JP"` を固定（既定はブラウザ言語に追従するので、
+            韓国語ブラウザだと東京の地図にハングルのラベルが出た）
+- [x] `onIdle` で `map.getBounds()` から bbox を取り、API を叩く（React Query）
+      - `onIdle` は操作が落ち着いてから 1 回発火するので、**自前のデバウンスは要らない**
+      - `queryKey` に入れる bbox は小数第 3 位に丸める
+      - ⚠ API の `latitude` / `longitude` は **文字列**で返る（`DecimalField` + DRF 既定）。`Number()` で変換する
+- [x] `AdvancedMarker` + `Pin` を喫煙区分で色分けして表示 + 凡例（フィルタ UI が凡例を兼ねる）
+- [x] **クラスタリングを最初から入れる**（1 画面に最大 200 件 = DOM ノード 200 個になりうる）
+      → **`@googlemaps/markerclusterer` は外して `supercluster` を直接使う。** 前者はマーカーの
+        DOM 要素から座標を読むため、要素に `position` が入る前に計算してしまい
+        **クラスタが 1 つも作られなかった**（`00-decisions.md` / `07-frontend.md`）
+      - [x] `radius: 120`（= 画面上 60px）。実測で DOM のマーカー要素が 200 → 88 個に減った
+- [x] マーカークリック → 詳細パネル（詳細は `GET /api/libraries/{id}/`）
+- [x] **喫煙区分がダミーデータである旨の注記を出す**（ヘッダー / フィルタ / 詳細パネルの 3 か所）
+- [x] **図書館データの出典（OpenStreetMap / ODbL）を画面に出す**（Google のロゴは自動で出る）
+- [x] 喫煙区分フィルタ UI
+- [x] `truncated` / 0 件 / エラー / ローディングの表示
+- [x] **地図自体が読めなかったときの表示**（キー未設定 / `VITE_MAP_ENABLED=0` はプレースホルダ）
+      - [ ] リファラー制限違反・請求先無効のときの見え方は未確認（Google が地図上にエラーを出す）
+- [x] ダークモードは `colorScheme="FOLLOW_SYSTEM"` で当てる
+      - ⚠ `colorScheme` は初期化時のみ有効。アプリ内トグルを付けるなら `<Map key={scheme}>` で
+        作り直す = **切り替えごとに 1 map load** なので、トグルは UI 側だけに効かせるほうが安い
+- [x] 現在地ボタン（`useGeolocation`）
+      - [x] 許可された場合に現在地マーカー + `panTo` + zoom 14
+      - [ ] **拒否されたときの挙動を実際に試す**（実装はしてあるが未検証。ブラウザの設定で拒否して確認）
+- [x] `streetViewControl={false}` / `mapTypeControl={false}`（Street View は別 SKU）
+- [x] 開発中に地図を描かないスイッチ（`VITE_MAP_ENABLED=0`）
+- [ ] **Cloud Console の Quotas で日次上限を掛ける**（300/日 程度。無料枠 10,000/月 ≒ 333/日）← 手作業
+      → 予算アラートは事後通知なので、**上限のほうが本命**。詳細は `07-frontend.md`「課金の単位を間違えないこと」
+- [ ] モバイル幅（375px）で地図とパネルが破綻しないか確認（CSS は書いたが未検証）
 
 ## Day 4 — 認証
 

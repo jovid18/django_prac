@@ -1,0 +1,21 @@
+/* クラスタのバブル。Google 既定のクラスタ描画は非推奨の
+   google.maps.Marker を使うので、自分で DOM で描く（docs/00-decisions.md）。 */
+.cluster {
+  display: grid;
+  place-content: center;
+  width: var(--size, 40px);
+  height: var(--size, 40px);
+  border: 2px solid #fff;
+  border-radius: 50%;
+  background: #1f2937;
+  color: #fff;
+  font-size: 13px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  box-shadow: 0 2px 8px rgb(0 0 0 / 35%);
+  cursor: pointer;
+}
+
+.cluster:hover {
+  background: #111827;
+}

@@ -1,0 +1,144 @@
+/* 地図は「親が高さを持っていないと潰れる」。ここで縦幅を確定させる。
+   ⚠ 要素セレクタ（`main { max-width }` など）でレイアウトを決めると、
+   この <main> にも当たって地図の幅が 0 になる。実際に一度やった（index.css）。 */
+.page {
+  display: grid;
+  grid-template-rows: auto 1fr auto;
+  height: 100dvh;
+}
+
+.header {
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--line);
+}
+
+.title {
+  margin: 0;
+  font-size: 16px;
+  letter-spacing: -0.01em;
+}
+
+.note {
+  margin: 2px 0 0;
+  font-size: 11px;
+  color: var(--sub);
+}
+
+.mapArea {
+  position: relative;
+  min-height: 0; /* grid の 1fr が中身に押し広げられないように */
+}
+
+/* --- 地図の上に重ねる UI ------------------------------------------------- */
+
+.overlayLeft {
+  position: absolute;
+  top: 10px;
+  left: 10px;
+  z-index: 2;
+}
+
+.overlayTop {
+  position: absolute;
+  top: 10px;
+  left: 50%;
+  z-index: 2;
+  display: grid;
+  gap: 6px;
+  translate: -50% 0;
+}
+
+.toast {
+  margin: 0;
+  padding: 6px 12px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--bg) 92%, transparent);
+  font-size: 12px;
+  white-space: nowrap;
+  box-shadow: 0 2px 10px rgb(0 0 0 / 18%);
+}
+
+.toast[data-tone='error'] {
+  color: var(--ng);
+}
+
+.retry {
+  margin-left: 8px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.overlayPanel {
+  position: absolute;
+  right: 10px;
+  bottom: 10px;
+  z-index: 3;
+  width: min(340px, calc(100% - 20px));
+}
+
+/* 読み込み中は地図の隅に控えめに出す。全画面ローディングにしない。 */
+.spinner {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  z-index: 2;
+  width: 16px;
+  height: 16px;
+  border: 2px solid color-mix(in srgb, var(--fg) 25%, transparent);
+  border-top-color: var(--fg);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    rotate: 360deg;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .spinner {
+    animation-duration: 2.4s;
+  }
+}
+
+/* --- 下のバー ------------------------------------------------------------ */
+
+.footer {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  justify-content: space-between;
+  padding: 6px 16px;
+  border-top: 1px solid var(--line);
+  font-size: 11px;
+  color: var(--sub);
+}
+
+.status {
+  font-variant-numeric: tabular-nums;
+}
+
+.attribution a {
+  color: inherit;
+}
+
+/* モバイル幅（375px）でパネルが画面を覆いすぎないようにする */
+@media (width <= 480px) {
+  .overlayPanel {
+    right: 10px;
+    left: 10px;
+    width: auto;
+  }
+
+  .toast {
+    white-space: normal;
+  }
+}

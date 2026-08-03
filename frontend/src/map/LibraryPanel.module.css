@@ -1,0 +1,83 @@
+.panel {
+  position: relative;
+  padding: 14px 16px 12px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--bg) 92%, transparent);
+  backdrop-filter: blur(10px);
+  box-shadow: 0 4px 18px rgb(0 0 0 / 22%);
+}
+
+.close {
+  position: absolute;
+  top: 6px;
+  right: 8px;
+  padding: 2px 6px;
+  border: 0;
+  background: none;
+  color: var(--sub);
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.name {
+  margin: 0 24px 0 0;
+  font-size: 15px;
+}
+
+.kana {
+  margin: 2px 0 0;
+  color: var(--sub);
+  font-size: 11px;
+}
+
+.rows {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 4px 12px;
+  margin: 10px 0 0;
+  font-size: 12px;
+}
+
+.rows dt {
+  color: var(--sub);
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.rows dd {
+  margin: 0;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.badge {
+  display: inline-block;
+  padding: 1px 8px;
+  border-radius: 999px;
+  color: #fff;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.dummy {
+  display: block;
+  margin-top: 3px;
+  color: var(--sub);
+  font-size: 10px;
+  line-height: 1.4;
+}
+
+.error {
+  margin: 8px 0 0;
+  color: var(--ng);
+  font-size: 11px;
+}
+
+.source {
+  margin: 10px 0 0;
+  color: var(--sub);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 10px;
+}

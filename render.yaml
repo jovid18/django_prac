@@ -63,6 +63,12 @@ services:
         sync: false
       - key: VITE_GOOGLE_OAUTH_CLIENT_ID
         sync: false
+      # ⚠ 課金に直結するキー。Cloud Console で HTTP リファラー制限を
+      #   本番 URL に対して入れてからここに設定する（docs/00-decisions.md）。
+      - key: VITE_GOOGLE_MAPS_API_KEY
+        sync: false
+      - key: VITE_GOOGLE_MAPS_MAP_ID
+        sync: false
     routes:
       # これが無いと /login を直接開いたときに 404 になる（SPA の典型的な事故）
       - type: rewrite

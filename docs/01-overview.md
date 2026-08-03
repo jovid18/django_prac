@@ -18,7 +18,7 @@
 | 3 | PostgreSQL との接続とマイグレーション運用 | `docker compose` / Render Postgres |
 | 4 | `docker compose up` 一発で立ち上がるローカル環境 | `docker-compose.yml` |
 | 5 | 自前の会員登録（ID/PW）と Google OAuth を**両方**ひとつの User モデルに載せる | `apps/accounts` |
-| 6 | ブラウザの Geolocation + 地図描画 + マーカー・フィルタ | MapLibre GL |
+| 6 | ブラウザの Geolocation + 地図描画 + マーカー・フィルタ | Google Maps JS API |
 | 7 | main へのマージで自動デプロイされる CI/CD | GitHub Actions + Render |
 
 ## 確定した技術選定
@@ -29,7 +29,7 @@
 | バックエンド | **Django 6.0 + DRF 3.17**（Python 3.13） | 練習の対象。LTS ではなく最新を採る理由は `00-decisions.md` |
 | DB | **PostgreSQL 16** | ローカルはコンテナ、デプロイは Render Postgres |
 | Python 依存管理 | **uv**（`uv.lock` を commit） | ロックファイルで CI と本番のバージョンを揃える |
-| 地図 | **MapLibre GL JS + 国土地理院（GSI）ラスタタイル** | API キーもクレジットカード登録も不要。東京の精度が高く、出典表示だけで無料 |
+| 地図 | **Google Maps JavaScript API**（`@vis.gl/react-google-maps`） | 当初は MapLibre + 地理院タイル（キー不要）だったが、**実際に描画して比べた結果、見た目を優先して変更**。キーと課金アカウントが必要になる点は受け入れた（`00-decisions.md`） |
 | 認証 | **メール + パスワード（JWT）と Google OAuth（ID トークン検証）** | LINE は[スコープ外](#スコープ外wont)として記録のみ |
 | ローカル | **docker compose**（db / api / web の 3 サービス） | |
 | デプロイ | **Render.com** — Static Site（フロント）+ Web Service（API）+ Postgres | |

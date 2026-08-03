@@ -22,6 +22,12 @@
   box-sizing: border-box;
 }
 
+html,
+body,
+#root {
+  height: 100%;
+}
+
 body {
   margin: 0;
   background: var(--bg);
@@ -32,53 +38,12 @@ body {
   line-height: 1.6;
 }
 
-main {
-  max-width: 640px;
-  margin: 0 auto;
-  padding: 48px 20px;
-}
-
-h1 {
-  margin: 0;
-  font-size: 22px;
-  letter-spacing: -0.01em;
-}
-
-.sub {
-  margin: 4px 0 32px;
-  color: var(--sub);
-  font-size: 14px;
-}
-
-dl {
-  margin: 0;
-  border-top: 1px solid var(--line);
-}
-
-dt {
-  padding-top: 14px;
-  font-size: 12px;
-  color: var(--sub);
-}
-
-dd {
-  margin: 2px 0 0;
-  padding-bottom: 14px;
-  border-bottom: 1px solid var(--line);
-  font-size: 14px;
-}
+/* 要素セレクタでレイアウトを決めない。
+   Day 1 では `main { max-width: 640px; padding: 48px 20px }` を置いていたが、
+   地図画面の <main> にも当たって**地図の幅が 0 になり真っ白**になった。
+   画面ごとのレイアウトは CSS Modules 側に持たせる（docs/07-frontend.md）。 */
 
 code {
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
   font-size: 13px;
-}
-
-.ok {
-  color: var(--ok);
-  font-weight: 600;
-}
-
-.ng {
-  color: var(--ng);
-  font-weight: 600;
 }

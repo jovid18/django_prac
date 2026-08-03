@@ -4,7 +4,10 @@
     "target": "es2023",
     "lib": ["ES2023", "DOM"],
     "module": "esnext",
-    "types": ["vite/client"],
+    // ⚠ この配列を書くと、他の @types/* は自動で読まれなくなる。
+    //    `google.maps`（@vis.gl/react-google-maps の依存に同梱）を明示しないと
+    //    `google.maps.LatLngLiteral` 等が「Cannot find namespace 'google'」になる。
+    "types": ["vite/client", "google.maps"],
     "allowArbitraryExtensions": true,
     "skipLibCheck": true,
 
@@ -17,6 +20,7 @@
     "jsx": "react-jsx",
 
     /* Linting */
+    "strict": true,
     "noUnusedLocals": true,
     "noUnusedParameters": true,
     "erasableSyntaxOnly": true,
