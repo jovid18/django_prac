@@ -25,9 +25,9 @@ flowchart LR
 
 | ジョブ | いつ | 内容 |
 |---|---|---|
-| `backend` | PR / main への push | ruff → pytest（Postgres サービスコンテナ付き） |
-| `frontend` | PR / main への push | eslint → tsc → vite build |
-| `deploy` | **main への push のみ**、上 2 つが成功したとき | Deploy Hook を 2 本叩く |
+| `backend` | PR / main への push | ruff → migrations チェック → pytest（Postgres サービスコンテナ付き） |
+| `frontend` | PR / main への push | oxlint → build |
+| `deploy` | **main への push のみ**、上 2 つが成功したとき | **変更のあったサービスだけ** Deploy Hook を叩く |
 
 `backend` と `frontend` は**並列に走らせる**。互いに依存がない。
 
@@ -150,6 +150,29 @@ jobs:
 | `npm run build` | ビルドが通ることの確認。`VITE_*` はダミーでよい（値の正しさは検証しない） |
 | `services: postgres` | SQLite で代用しない。**本番と同じ Postgres で回さないと、`citext` や制約の挙動差で「CI は緑なのに本番で落ちる」が起きる** |
 | `curl -fsS` | `-f` を付けないと、Hook が 4xx を返しても curl が成功扱いになり、**デプロイ失敗が緑になる** |
+
+### 変更のあったサービスだけデプロイする
+
+`deploy` ジョブは、`git diff` で変更範囲を見てから Hook を叩く。
+
+| 変更したもの | API | Frontend |
+|---|---|---|
+| `backend/**` | デプロイ | スキップ |
+| `frontend/**` | スキップ | デプロイ |
+| `render.yaml` | デプロイ | デプロイ（両サービスの設定なので） |
+| `docs/**`、`AGENTS.md`、`.claude/**` | スキップ | スキップ |
+
+**なぜ必要か**: これが無いと、**ドキュメントを 1 行直しただけで API が再デプロイされる。**
+無料プランでは再デプロイのたびに 1 分ほどサービスが落ちるので、`docs/` を頻繁に
+更新するこのリポジトリでは無視できない。
+
+**★ ワークフロー全体に `paths` フィルタを掛けてはいけない。**
+ブランチ保護で `backend` / `frontend` を必須チェックにしているため、
+`paths` で job ごと走らなくすると**必須チェックが永久に pending になり、
+PR がマージできなくなる**。CI は常に走らせ、**デプロイの段だけ条件付き**にする。
+
+`github.event.before` が辿れない場合（初回 push、force push 後）は、
+安全側に倒して両方デプロイする。
 
 ### Deploy Hook を秘密にする理由
 
