@@ -90,19 +90,62 @@ jobs:
           VITE_API_BASE_URL: https://example.invalid # 通ることの確認だけ
           VITE_GOOGLE_OAUTH_CLIENT_ID: dummy
 
+  # 変更のあったサービスだけをデプロイする。
+  #
+  # ワークフロー全体に paths フィルタを掛けてはいけない。ブランチ保護で
+  # backend / frontend を必須チェックにしているため、job ごと走らなくなると
+  # 必須チェックが永久に pending になり PR をマージできなくなる。
+  # そのため **CI は常に走らせ、デプロイの段だけ条件付き**にする。
   deploy:
     needs: [backend, frontend]
     if: github.ref == 'refs/heads/main' && github.event_name == 'push'
     runs-on: ubuntu-latest
 
     steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # 差分を取るため全履歴が要る
+
+      - name: 変更範囲を判定
+        id: changed
+        env:
+          BEFORE: ${{ github.event.before }}
+          AFTER: ${{ github.sha }}
+        run: |
+          # 初回 push や force push で before が辿れない場合は安全側に倒して両方デプロイする
+          if ! git cat-file -e "${BEFORE}^{commit}" 2>/dev/null; then
+            echo "before が辿れないため両方デプロイします"
+            echo "backend=true"  >> "$GITHUB_OUTPUT"
+            echo "frontend=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          files=$(git diff --name-only "$BEFORE" "$AFTER")
+          echo "--- 変更ファイル ---"
+          echo "$files"
+
+          # render.yaml は両サービスの設定なので、変わったら両方に反映させる
+          if echo "$files" | grep -qE '^(backend/|render\.yaml$)'; then
+            echo "backend=true" >> "$GITHUB_OUTPUT"
+          fi
+          if echo "$files" | grep -qE '^(frontend/|render\.yaml$)'; then
+            echo "frontend=true" >> "$GITHUB_OUTPUT"
+          fi
+
       # -f を付けないと 4xx でも curl が成功扱いになり、失敗が緑になる
       - name: Deploy API
+        if: steps.changed.outputs.backend == 'true'
         run: curl -fsS -X POST "$HOOK"
         env:
           HOOK: ${{ secrets.RENDER_DEPLOY_HOOK_API }}
 
       - name: Deploy Frontend
+        if: steps.changed.outputs.frontend == 'true'
         run: curl -fsS -X POST "$HOOK"
         env:
           HOOK: ${{ secrets.RENDER_DEPLOY_HOOK_WEB }}
+
+      - name: 結果
+        run: |
+          echo "API      : ${{ steps.changed.outputs.backend  == 'true' && 'デプロイした' || 'スキップ（変更なし）' }}"
+          echo "Frontend : ${{ steps.changed.outputs.frontend == 'true' && 'デプロイした' || 'スキップ（変更なし）' }}"
