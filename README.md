@@ -51,7 +51,13 @@ flowchart LR
     spa <-->|"地図の描画・ID トークン取得<br/>ブラウザが直接やり取りする"| google
 ```
 
-**フロントと API は別サブドメイン**（`*.onrender.com`）。これが認証の制約に直結する（後述）。
+**フロントと API はホストが違う**（`django-prac-web.onrender.com` と `django-prac-api.onrender.com`）。
+
+普通なら兄弟サブドメインは *same-site* 扱いで Cookie を共有できる。しかし
+**`onrender.com` は Public Suffix List に載っている**ため、`onrender.com` 自体が
+実効 TLD として扱われ、**登録可能ドメインがホスト全体**になる。
+結果この 2 つは *cross-site* で、**Cookie を共有できない。**
+これが認証の制約に直結する（後述）。
 
 ---
 
@@ -79,9 +85,10 @@ sequenceDiagram
 - 丸めないと 1px 動かすたびに `queryKey` が変わってキャッシュが効かない。
 - `limit` で打ち切られたら `truncated: true` を返し、画面に「拡大してください」を出す。
   黙って切ると「ズームアウトすると一部のピンが消える」という説明のつかない挙動になる。
-- クラスタは**マーカーの DOM ではなく API の緯度経度から**計算する。DOM から座標を読む実装
-  （`@googlemaps/markerclusterer`）は要素に `position` が入る前に計算してしまい、
-  **クラスタが 1 つも作られなかった。**
+- ピンのまとめ（クラスタ）は **API が返した緯度経度から**計算する。
+  Google 公式の `@googlemaps/markerclusterer` は**地図に置いたマーカー側から座標を読む**作りで、
+  それだと座標が入るより先に計算が走り、**クラスタが 1 つもできなかった。**
+  そのため `supercluster` を直接使っている（経緯は [`docs/07-frontend.md`](docs/07-frontend.md)）。
 
 ### 2. ログイン状態の保持
 
@@ -107,7 +114,7 @@ sequenceDiagram
   （同一オリジンの JS から全部読めるので、依存ライブラリ 1 つの汚染で持ち出される）。
 - **refresh は HttpOnly Cookie**（`Path=/api/auth`）。本文には一切入れない。
 - 通常のリクエストが 401 になったら **refresh → 1 回だけリトライ。** ループさせない。
-- **refresh は single-flight。** ローテーションを有効にしてあるので、同時に 2 本投げると
+- **refresh は同時に 1 本だけしか投げない**（single-flight）。ローテーションを有効にしてあるので、同時に 2 本投げると
   後から届いた方がブラックリスト済みの Cookie を使い、**正しいトークンまで無効化される。**
   React の StrictMode は effect を 2 回走らせるので、これが無いと開発中は必ず踏む。
 
@@ -145,10 +152,10 @@ sequenceDiagram
 
 ### 認証
 
-- フロントと API が別サブドメインで、`onrender.com` は Public Suffix List に載っているため
-  **別サイト扱い**になる。refresh Cookie は third-party cookie なので
+- 上の「構成」のとおりフロントと API は *cross-site* なので、refresh Cookie は
+  **third-party cookie** になる。つまり
   **Safari やサードパーティ Cookie ブロック下ではログインが維持されない。**
-  根本回避は独自ドメインしかないので受け入れている。
+  独自ドメインを当てれば same-site になって解決するが、買わない判断をしたので受け入れている。
 - 未ログインでも地図・一覧・詳細は見られる。**ログインを要求するのは書き込み（お気に入り）だけ。**
 
 ### 運用（無料プランの制約）
