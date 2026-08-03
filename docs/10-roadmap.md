@@ -19,7 +19,7 @@
       - 承認済み JavaScript 生成元に `http://localhost:5173` を登録
       - 本番 URL は Day 1 で確定してから追加した
 - [x] **Render のアカウントを作る** ← 手作業。GitHub アカウントで sign up してリポジトリへのアクセスを許可する
-- [ ] **Google Maps の API キーと Map ID を用意する** ← 手作業。**Day 3 の前提**（`00-decisions.md`）
+- [x] **Google Maps の API キーと Map ID を用意する** ← 手作業。**Day 3 の前提**（`00-decisions.md`）
       - OAuth と**同じ Cloud プロジェクト**で「Maps JavaScript API」を有効化する
         （プロジェクト ID: **`django-prac-504402`** / 表示名は `django-prac`。
         コンソールの URL に `?project=django-prac-504402` を付けると迷わない。
@@ -165,8 +165,14 @@
       - [ ] **拒否されたときの挙動を実際に試す**（実装はしてあるが未検証。ブラウザの設定で拒否して確認）
 - [x] `streetViewControl={false}` / `mapTypeControl={false}`（Street View は別 SKU）
 - [x] 開発中に地図を描かないスイッチ（`VITE_MAP_ENABLED=0`）
-- [ ] **Cloud Console の Quotas で日次上限を掛ける**（300/日 程度。無料枠 10,000/月 ≒ 333/日）← 手作業
-      → 予算アラートは事後通知なので、**上限のほうが本命**。詳細は `07-frontend.md`「課金の単位を間違えないこと」
+- [x] **Cloud Console の Quotas で日次上限を掛ける**（300/日。無料枠 10,000/月 ≒ 333/日）← 手作業
+      → 予算アラートは事後通知なので、**上限のほうが本命**。リファラー制限は `curl` で Referer を
+        偽装できるため請求を止められない。詳細は `07-frontend.md`「課金の単位を間違えないこと」
+- [x] **本番にデプロイして地図が出ることを確認**
+      - Static Site の環境変数（`VITE_GOOGLE_MAPS_API_KEY`）は**ビルド時に埋まる**ので、
+        値を入れてから main にマージする順序にした（後だと Manual Deploy がもう 1 回必要）
+      - キーのリファラー制限に本番 URL を追加済み。**Console にエラーが出ないことまで確認**
+        （`RefererNotAllowedMapError` が出ていない = 制限が正しい）
 - [ ] モバイル幅（375px）で地図とパネルが破綻しないか確認（CSS は書いたが未検証）
 
 ## Day 4 — 認証
