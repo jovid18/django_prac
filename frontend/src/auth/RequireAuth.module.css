@@ -1,0 +1,8 @@
+.gate {
+  display: grid;
+  place-items: center;
+  min-height: 100dvh;
+  margin: 0;
+  color: var(--sub);
+  font-size: 13px;
+}

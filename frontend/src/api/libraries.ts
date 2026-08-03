@@ -1,5 +1,11 @@
-import type { Bbox, LibraryDetail, LibraryListResponse, SmokingStatus } from '../types/api'
-import { apiGet } from './client'
+import type {
+  Bbox,
+  FavoriteListResponse,
+  LibraryDetail,
+  LibraryListResponse,
+  SmokingStatus,
+} from '../types/api'
+import { apiDelete, apiGet, apiPost } from './client'
 
 /**
  * bbox のクエリ表記。
@@ -20,4 +26,21 @@ export function fetchLibraries(args: {
 
 export function fetchLibraryDetail(id: number): Promise<LibraryDetail> {
   return apiGet<LibraryDetail>(`/api/libraries/${id}/`)
+}
+
+// --- お気に入り -------------------------------------------------------------
+//
+// API 側はどちらも冪等（二重登録も未登録の解除も成功扱い）なので、
+// フロントは「今どちらの状態か」を送る前に確認しなくてよい（docs/05-api.md）。
+
+export function addFavorite(id: number): Promise<{ is_favorited: boolean }> {
+  return apiPost<{ is_favorited: boolean }>(`/api/libraries/${id}/favorite/`)
+}
+
+export function removeFavorite(id: number): Promise<void> {
+  return apiDelete(`/api/libraries/${id}/favorite/`)
+}
+
+export function fetchFavorites(): Promise<FavoriteListResponse> {
+  return apiGet<FavoriteListResponse>('/api/favorites/')
 }

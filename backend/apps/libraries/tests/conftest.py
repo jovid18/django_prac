@@ -1,4 +1,5 @@
 import pytest
+from rest_framework_simplejwt.tokens import RefreshToken
 
 from apps.libraries.models import Library, SmokingStatus
 
@@ -35,3 +36,35 @@ def libraries(db):
 def tokyo_center_bbox():
     """東京駅まわりだけを含む bbox（min_lng,min_lat,max_lng,max_lat）。"""
     return "139.70,35.66,139.80,35.70"
+
+
+@pytest.fixture
+def user(django_user_model):
+    return django_user_model.objects.create_user(
+        email="taro@example.com", password="correct-horse-battery"
+    )
+
+
+@pytest.fixture
+def other_user(django_user_model):
+    """他人のお気に入りが混ざらないことを確かめるための 2 人目。"""
+    return django_user_model.objects.create_user(
+        email="hanako@example.com", password="correct-horse-battery"
+    )
+
+
+@pytest.fixture
+def bearer():
+    """アクセストークンを Authorization ヘッダの形にして返す。
+
+    ★ `client.force_login` は使えない。API 認証は JWT のみで、
+      SessionAuthentication を DRF に入れていない（config/settings/base.py）。
+      ログイン API を経由しないのは、`login` のスロットリング（5/min）に
+      引っかからないようにするため。
+    """
+
+    def make(user) -> dict:
+        access = RefreshToken.for_user(user).access_token
+        return {"headers": {"authorization": f"Bearer {access}"}}
+
+    return make

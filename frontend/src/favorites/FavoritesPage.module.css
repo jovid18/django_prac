@@ -1,0 +1,185 @@
+/* 地図画面と同じ 3 段（ヘッダー / 本文 / フッター）。
+   本文だけが伸縮して、フッターの出典表示が常に見えるようにする。 */
+.page {
+  display: grid;
+  grid-template-rows: auto 1fr auto;
+  min-height: 100dvh;
+}
+
+.header {
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--line);
+}
+
+.headline {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.title {
+  margin: 0;
+  font-size: 16px;
+  letter-spacing: -0.01em;
+}
+
+.note {
+  margin: 2px 0 0;
+  color: var(--sub);
+  font-size: 11px;
+}
+
+.main {
+  min-width: 0;
+  padding: 16px;
+}
+
+.message {
+  margin: 24px auto;
+  max-width: 32em;
+  color: var(--sub);
+  font-size: 13px;
+  text-align: center;
+}
+
+.retry {
+  margin-left: 8px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  font-weight: 700;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+/* --- 一覧 ---------------------------------------------------------------- */
+
+.list {
+  display: grid;
+  gap: 8px;
+  width: min(720px, 100%);
+  margin: 0 auto;
+  padding: 0;
+  list-style: none;
+}
+
+.row {
+  display: grid;
+  /* 名前 / 喫煙区分 / 解除ボタン。375px では 1 列に折る（下の @media）。 */
+  grid-template-columns: 1fr auto auto;
+  gap: 4px 12px;
+  align-items: center;
+  padding: 10px 14px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+}
+
+.body {
+  min-width: 0;
+}
+
+.name {
+  margin: 0;
+  font-size: 14px;
+}
+
+.meta {
+  margin: 2px 0 0;
+  color: var(--sub);
+  font-size: 11px;
+  overflow-wrap: anywhere;
+}
+
+.badge {
+  padding: 1px 8px;
+  border-radius: 999px;
+  color: #fff;
+  font-size: 11px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.action {
+  display: grid;
+  gap: 2px;
+  justify-items: end;
+}
+
+.remove {
+  min-height: 28px;
+  padding: 3px 10px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: none;
+  color: var(--sub);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.remove:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+
+.error {
+  margin: 0;
+  color: var(--ng);
+  font-size: 11px;
+}
+
+/* --- 下のバー ------------------------------------------------------------ */
+
+.footer {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  align-items: center;
+  padding: 6px 16px;
+  border-top: 1px solid var(--line);
+  color: var(--sub);
+  font-size: 11px;
+}
+
+.status {
+  font-variant-numeric: tabular-nums;
+}
+
+.back {
+  color: inherit;
+}
+
+.attribution {
+  margin-left: auto;
+}
+
+.attribution a {
+  color: inherit;
+}
+
+@media (width <= 480px) {
+  .row {
+    /* 名前を 1 行占有させ、区分と解除を下段に並べる。
+       375px で 3 列のままにすると名前が 2 文字ずつ折り返す。 */
+    grid-template-columns: 1fr auto;
+  }
+
+  .body {
+    grid-column: 1 / -1;
+  }
+
+  /* ★ 375px で実測して見つけた不具合。下段に落ちた badge が `1fr` の列を
+     受け取り、**ピルではなく画面幅いっぱいの赤い帯**になっていた。
+     デスクトップ幅では `auto` 列なので気づけない類（docs/07-frontend.md）。 */
+  .badge {
+    justify-self: start;
+  }
+
+  .attribution {
+    margin-left: 0;
+  }
+}

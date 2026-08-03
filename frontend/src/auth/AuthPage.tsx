@@ -71,9 +71,16 @@ export function AuthPage({ mode }: { mode: Mode }) {
             )
           }}
         >
-          <label className={styles.field}>
+          {/* ★ `name` / `id` を付けている理由は「関連付け」ではない。
+              `<label>` で包んであるのでアクセシビリティ上の関連付けは既にできている。
+              付けないと Chrome が `A form field element should have an id or name
+              attribute` を出し、**パスワードマネージャの自動入力が効きにくい**
+              （Day 4 で見つけた実害。docs/10-roadmap.md）。 */}
+          <label className={styles.field} htmlFor="email">
             <span className={styles.label}>メールアドレス</span>
             <input
+              id="email"
+              name="email"
               className={styles.input}
               type="email"
               value={email}
@@ -84,9 +91,11 @@ export function AuthPage({ mode }: { mode: Mode }) {
           </label>
 
           {mode === 'register' && (
-            <label className={styles.field}>
+            <label className={styles.field} htmlFor="display_name">
               <span className={styles.label}>表示名（任意）</span>
               <input
+                id="display_name"
+                name="display_name"
                 className={styles.input}
                 type="text"
                 value={displayName}
@@ -97,9 +106,11 @@ export function AuthPage({ mode }: { mode: Mode }) {
             </label>
           )}
 
-          <label className={styles.field}>
+          <label className={styles.field} htmlFor="password">
             <span className={styles.label}>パスワード</span>
             <input
+              id="password"
+              name="password"
               className={styles.input}
               type="password"
               value={password}

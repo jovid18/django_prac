@@ -29,7 +29,7 @@ npm install react-router @vis.gl/react-google-maps @googlemaps/markerclusterer @
 
 ## ディレクトリ構成
 
-Day 4 までの実際の構成（当初案から名前が変わった箇所には理由を書いた）。
+Day 5（お気に入り）までの実際の構成（当初案から名前が変わった箇所には理由を書いた）。
 
 ```
 frontend/src/
@@ -39,7 +39,7 @@ frontend/src/
 │
 ├── api/
 │   ├── client.ts            # fetch ラッパ。アクセストークン保持 + 401 → refresh → 1 回リトライ
-│   └── libraries.ts         # 一覧 / 詳細
+│   └── libraries.ts         # 一覧 / 詳細 / お気に入りの登録・解除・一覧
 │
 ├── auth/
 │   ├── api.ts               # register / login / google / me / logout（api/auth.ts から移した。
@@ -49,7 +49,13 @@ frontend/src/
 │   ├── AuthProvider.tsx     # 状態と起動時 refresh
 │   ├── AuthPage.tsx         # ログインと登録を 1 枚で兼ねる（差分は文言と 1 フィールドだけ）
 │   ├── AuthMenu.tsx         # ヘッダー右上のログイン状態
+│   ├── RequireAuth.tsx      # ログイン必須ルートの囲い（Day 5 のお気に入り画面で初めて必要になった）
 │   └── GoogleSignInButton.tsx
+│
+├── favorites/
+│   ├── FavoritesPage.tsx    # /favorites。**地図を描かない**（map load を増やさない）
+│   ├── FavoriteButton.tsx   # 詳細パネルの ☆。未ログインなら /login に飛ばす
+│   └── useFavorite.ts       # 一覧の useQuery と、登録・解除の useMutation
 │
 ├── map/
 │   ├── MapPage.tsx          # 地図画面全体（地図 + フィルタ + 詳細パネル）
@@ -68,7 +74,6 @@ frontend/src/
 ```
 
 **`components/` はまだ作っていない。** 汎用化したいものが 2 つ以上出てから作る。
-`RequireAuth.tsx` も未作成（Day 5 のお気に入り画面で初めて必要になる）。
 
 ## 画面と経路
 
@@ -77,10 +82,23 @@ frontend/src/
 | `/` | 地図（メイン） | 不要 |
 | `/login` | ログイン | 不要 |
 | `/register` | 会員登録 | 不要 |
-| `/favorites` | お気に入り一覧（Should） | 必要 |
+| `/favorites` | お気に入り一覧 | 必要（`RequireAuth`） |
 
 - **`/` は未ログインでも開ける。** 起動して最初に見えるのがログイン画面という構成にしない。
-- ヘッダー右上に「ログイン」または「ユーザー名 / ログアウト」を出す。
+- ヘッダー右上に「ログイン」または「ユーザー名 / お気に入り / ログアウト」を出す。
+
+### `RequireAuth`
+
+```tsx
+if (status === 'loading') return <p>読み込み中…</p>       // ← ここが要点
+if (status === 'anonymous') return <Navigate to="/login" replace state={{ from }} />
+return children
+```
+
+★ **`loading` を `anonymous` と一緒に扱わないこと。** access はメモリにしか無いので、
+リロード直後は必ず「ログイン済みか分からない」状態を通る。ここで弾くと
+**ログイン済みなのに F5 のたびにログイン画面へ飛ばされる**（`06-auth.md`）。
+`/favorites` を開いた状態でリロードして残ることを実測して確認した。
 
 ## 環境変数
 
@@ -280,6 +298,24 @@ isCluster(feature) ? (
 - **喫煙区分の横に注記を必ず出す**:
   > ※ このアプリの喫煙区分は開発練習用に自動生成したダミーデータで、実際の施設とは関係ありません。
 - 未ログインでお気に入りを押したら、ログイン画面に飛ばす（戻り先を保持する）。
+  **ボタンを隠したり無効化したりしない。** 押せて導線が繋がるほうにする
+  （ラベルは「☆ お気に入り（ログインが必要）」）。
+
+### お気に入り
+
+| 論点 | 決めごと |
+|---|---|
+| 星の状態の出どころ | **詳細（`is_favorited`）だけ。** 一覧には入れていない（数百件に対して N+1 になる） |
+| 詳細が届く前 | `isFavorited === undefined` を渡して**押せない状態にする。** 楽観的に「☆」を出すと、既に登録済みの館で一瞬「未登録」に見えてから切り替わる |
+| 押した後 | 詳細は**再取得せず `setQueryData` で書き換える。** API が冪等なので「成功したなら `next` の状態」と言い切れる。往復を 1 回減らせる |
+| 一覧（`/favorites`） | `invalidateQueries` で取り直す。行が増減するので書き換えでは済まない |
+| `/favorites` に地図を置くか | **置かない。** `APIProvider` を巻くと map load が 1 増えるだけ。代わりに API から `address` をもらう |
+
+> **375px で 1 件見つけて直した。** 一覧の行を `1fr auto auto` の grid にしていて、
+> モバイル幅で下段に落ちた喫煙区分の badge が `1fr` の列を受け取り、
+> **ピルではなく画面幅いっぱいの赤い帯**になっていた（`justify-self: start` で修正）。
+> デスクトップ幅では `auto` 列なので当たらない = **幅を変えて見るまで気づけない類**。
+> Day 3 の「詳細パネルが Google のロゴを覆っていた」と同じ性質の不具合。
 
 ### 出典表示
 

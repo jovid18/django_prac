@@ -240,19 +240,62 @@
 
 ## Day 4 の残り課題（Day 5 で拾う）
 
-- [ ] フォームの入力欄に `name` / `id` を付ける。`<label>` で包んであるので**アクセシビリティ上の
+- [x] フォームの入力欄に `name` / `id` を付ける。`<label>` で包んであるので**アクセシビリティ上の
       関連付けはできている**が、Chrome が `A form field element should have an id or name
       attribute` を出す。パスワードマネージャの自動入力の効きが弱いのが実害
+      → 3 つの入力欄に `id` / `name` を付け、`<label htmlFor>` も明示した。
+        **ブラウザのコンソールから当該の警告が消えたことを確認済み**
 
 ## Day 5 — 仕上げと Should
 
-- [ ] お気に入り（`POST`/`DELETE /api/libraries/{id}/favorite/`、`/favorites` 画面）
-- [ ] `nearby`（現在地から近い順）
-- [ ] テキスト検索
-- [ ] モバイル幅（375px）でレイアウトが崩れないか確認
-- [ ] ダークモード
+### お気に入り ✅
+
+- [x] `POST` / `DELETE /api/libraries/{id}/favorite/`（**どちらも冪等**。`05-api.md`）
+      - 閲覧は `AllowAny` のまま、**このアクションだけ `permission_classes` を上書き**する。
+        ViewSet 全体を `IsAuthenticated` にすると地図がログイン必須になる
+      - 未ログインは**存在しない id でも `401`**（権限チェックが先）。
+        逆にすると「どの id が存在するか」を未ログインで総当たりできる
+- [x] `GET /api/favorites/`
+      - **ルータの外に `path()` で 1 本**置いた。`ViewSet` にすると使わない
+        detail / update / destroy まで公開されてしまう
+      - **`Favorite` をネストせず、一覧の 1 件に `address` と `favorited_at` を足した形**で返す。
+        フロントが地図と同じ `LibraryListItem` として扱えるようにするため
+      - `Library.objects.filter(favorites__user=u).annotate(...)` にしていない。
+        多値リレーションへの join なので join が再利用されるかで件数が変わりうる。
+        `Favorite` を主体に `select_related` で 1 クエリ回すほうが読んで分かる
+- [x] フロント: `RequireAuth` / `/favorites` 画面 / 詳細パネルの ☆ ボタン
+      - **`/favorites` には地図を置かない**（`APIProvider` を巻くと map load が 1 増えるだけ）。
+        代わりに API から `address` をもらう
+      - 星の状態は**詳細（`is_favorited`）だけが持つ**。一覧に入れると数百件に対して N+1
+      - 未ログインで押されたら**ログイン画面に飛ばす**（ボタンは隠さない）
+- [x] テスト 87 件（うち favorite 16 件）
+- [x] **ローカルで一通り通した**（ブラウザで実測）
+      - 登録 → ピンをクリック → ☆ が ★ に変わる → `/favorites` に出る → 解除で行が消える
+      - **`/favorites` を開いた状態で F5 → ログイン状態のまま**（`RequireAuth` の `loading` 分岐）
+      - ログアウト後に `/favorites` を直打ち → `/login` にリダイレクト
+      - 未ログインで ☆ を押す → `/login` → ログイン → **元の地図画面に戻る**
+      - コンソールにエラー・警告なし（Day 4 のフォーム警告も消えている）
+- [x] **375px で 1 件不具合を発見して修正: 一覧の badge が画面幅いっぱいの赤い帯になっていた。**
+      grid を `1fr auto auto` にしていて、モバイル幅で下段に落ちた badge が `1fr` の列を
+      受け取っていた。デスクトップ幅では `auto` 列なので当たらない =
+      **幅を変えて見るまで気づけない類**（Day 3 の「パネルが Google のロゴを覆う」と同じ性質）
+
+### まだ残っているもの
+
+- [ ] `nearby`（現在地から近い順）— バックエンド未実装
+- [ ] テキスト検索 — **バックエンドの `q` は Day 2 で実装済み。**
+      フロントに検索欄を足すだけ（`fetchLibraries` に `q` を渡す）
 - [ ] `drf-spectacular` で API ドキュメント（任意）
 - [ ] README を書く
+- [x] ダークモード（Day 1〜3 で実装済み。UI 側は `prefers-color-scheme`、
+      地図側は `colorScheme="FOLLOW_SYSTEM"`。Day 5 のお気に入り画面も同じ変数で追従する）
+- [x] モバイル幅（375px）でレイアウトが崩れないか確認（地図画面は Day 4、
+      お気に入り画面は Day 5 に実測。どちらも横スクロールなし）
+
+> **お気に入りから地図へ飛ぶ導線（「地図で見る」）は入れていない。**
+> `MapView` の中心は `defaultCenter`（非制御）なので、外から座標を渡すには
+> カメラを制御に変える必要があり、それは「操作が重くなる」ので避けた設計
+> （`07-frontend.md`）。やるなら `map.panTo` を使う別の口を用意する。
 
 ## 動作確認シナリオ（デプロイ後に毎回通す）
 

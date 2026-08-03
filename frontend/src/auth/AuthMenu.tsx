@@ -37,6 +37,14 @@ export function AuthMenu() {
       <span className={styles.who} title={user?.email}>
         {user?.display_name || user?.email}
       </span>
+      {/* お気に入り画面への入口。ログイン済みのときだけ出す
+          （未ログインで押しても RequireAuth に弾かれるだけなので、出さない）。
+          このメニューは /favorites 自身のヘッダーでも使うので、そこでは出さない。 */}
+      {location.pathname !== '/favorites' && (
+        <Link className={styles.link} to="/favorites">
+          お気に入り
+        </Link>
+      )}
       <button className={styles.link} type="button" onClick={() => void logout()}>
         ログアウト
       </button>

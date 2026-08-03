@@ -1,10 +1,16 @@
-from rest_framework import viewsets
+from rest_framework import status, viewsets
+from rest_framework.decorators import action
 from rest_framework.exceptions import ValidationError
-from rest_framework.permissions import AllowAny
+from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
+from rest_framework.views import APIView
 
-from .models import Library, SmokingStatus
-from .serializers import LibraryDetailSerializer, LibraryListSerializer
+from .models import Favorite, Library, SmokingStatus
+from .serializers import (
+    FavoriteListSerializer,
+    LibraryDetailSerializer,
+    LibraryListSerializer,
+)
 
 DEFAULT_LIMIT = 200
 MAX_LIMIT = 500
@@ -109,4 +115,59 @@ class LibraryViewSet(viewsets.ReadOnlyModelViewSet):
                 "truncated": truncated,
                 "results": LibraryListSerializer(rows, many=True).data,
             }
+        )
+
+    @action(detail=True, methods=["post", "delete"], permission_classes=[IsAuthenticated])
+    def favorite(self, request, pk=None):
+        """`POST` / `DELETE /api/libraries/{id}/favorite/` — お気に入りの登録と解除。
+
+        **どちらも冪等にする**（docs/05-api.md）。二重 POST に 409、未登録の
+        DELETE に 404 を返すと、フロントが押す前に「登録済みか」を問い合わせる
+        作りになる。ボタンを連打されても、オフラインから復帰して再送されても、
+        結果の状態が同じであれば良い。
+
+        ★ 閲覧は AllowAny だが、このアクションだけ `permission_classes` を
+          上書きして認証を要求する。ViewSet 全体を IsAuthenticated にすると
+          地図がログイン必須になってしまう。
+        """
+        library = self.get_object()
+
+        if request.method == "DELETE":
+            # 未登録でも 204。0 件の delete() はエラーにならない。
+            Favorite.objects.filter(user=request.user, library=library).delete()
+            return Response(status=status.HTTP_204_NO_CONTENT)
+
+        # 同時に 2 回来ても UniqueConstraint で弾かれるだけ。
+        # get_or_create は IntegrityError を拾って get に落ちる。
+        Favorite.objects.get_or_create(user=request.user, library=library)
+        return Response({"is_favorited": True}, status=status.HTTP_201_CREATED)
+
+
+class FavoriteListView(APIView):
+    """`GET /api/favorites/` — 自分のお気に入り（登録が新しい順）。"""
+
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        favorites = (
+            Favorite.objects.filter(user=request.user)
+            .select_related("library")
+            # id を second key に入れて同時刻でも順序が揺れないようにする。
+            .order_by("-created_at", "-id")
+        )
+
+        # ★ `Library.objects.filter(favorites__user=u).annotate(...)` にしていない。
+        #   多値リレーション（favorites）への join になるので、filter の join が
+        #   再利用されるかどうかで結果の件数が変わりうる。ここは 1 ユーザーあたり
+        #   数十件の規模なので、Favorite を主体に 1 クエリ回して属性を載せるほうが
+        #   読んで分かる（`select_related` で Library の N+1 は潰してある）。
+        rows = []
+        for favorite in favorites:
+            library = favorite.library
+            library.favorited_at = favorite.created_at
+            rows.append(library)
+
+        # bbox で切っていないので `truncated` は無い（docs/05-api.md）。
+        return Response(
+            {"count": len(rows), "results": FavoriteListSerializer(rows, many=True).data}
         )
