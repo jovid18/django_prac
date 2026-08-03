@@ -273,7 +273,7 @@ Render には[公式の Terraform プロバイダ](https://render.com/docs/terra
 **判断理由**
 
 1. **リソースが 3 つしかなく、依存関係も `DATABASE_URL` の 1 本だけ。** `terraform plan` の差分確認が活きる場面がない。Terraform が価値を出すのは VPC / サブネット / セキュリティグループ / IAM のように、リソースが多く絡み合っているとき
-2. **転用価値が低い。** 元プロジェクト（smocking）で Terraform を想定していたのは AWS（EC2・RDS・ECR・ネットワーク）を管理するため。Render に Terraform を当てて覚えられるのは **Render の API の形**であって、その AWS の概念ではない
+2. **転用価値が低い。** 元プロジェクトで Terraform を想定していたのは AWS（EC2・RDS・ECR・ネットワーク）を管理するため。Render に Terraform を当てて覚えられるのは **Render の API の形**であって、その AWS の概念ではない
 3. **コストが練習時間を食う。** state の保管、API キー管理、CI への `plan` / `apply` の追加でおよそ 1 日。その 1 日は Django / React の練習から引かれる
 
 > **Terraform を練習したくなったら、対象は AWS にする。** それは実質的に元プロジェクトそのものなので、この練習リポジトリではやらない。

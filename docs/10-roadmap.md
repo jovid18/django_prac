@@ -421,7 +421,7 @@ docker compose up --build          # ローカルを作り直す
 
 ## この練習が終わったら
 
-元プロジェクト（[smocking-notes](https://github.com/jovid18/smocking-notes)）に戻ったときに使えるようになっているもの:
+元プロジェクトに戻ったときに使えるようになっているもの:
 
 | ここで身についたもの | 元プロジェクトでの対応箇所 |
 |---|---|
