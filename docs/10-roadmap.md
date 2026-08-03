@@ -225,7 +225,7 @@
         （`onrender.com` は Public Suffix List に載っている）。リフレッシュ Cookie は
         third-party cookie なので、**Safari やサードパーティ Cookie ブロック下では
         維持されない見込み（未検証）。** 根本回避は独自ドメインしかないので受け入れる（`06-auth.md`）
-- [ ] **本番で Google ログインを確認** — 手前まで確認済み。**残りは実アカウントでのサインインだけ**
+- [x] **本番で Google ログインを確認**（実アカウントでのサインインまで完了）
       - [x] クライアント ID がビルドに埋まっている（ボタンが描画される）
       - [x] **`[GSI_LOGGER]: The given origin is not allowed for the given client ID` が出ない**
             = 承認済み JavaScript 生成元に本番 URL が登録できている。
@@ -233,7 +233,16 @@
       - [x] ボタンのラベルが日本語（`?hl=ja` が本番でも効いている）
       - [x] API 側の `GOOGLE_OAUTH_CLIENT_ID` 設定済み（不正トークンで **401**。
             未設定なら 503 を返す実装なので、これで切り分けられる）
-      - [ ] 実際の Google アカウントでサインインして 200 / 201 が返ること ← **要手作業**
+      - [x] 実際の Google アカウントでサインインしてログインできた ← 手作業で確認
+
+> **Day 4 は完了。** 未検証で残っているのは **Safari でのログイン維持**だけで、
+> これは実装の不備ではなく third-party cookie の制約（上記）。
+
+## Day 4 の残り課題（Day 5 で拾う）
+
+- [ ] フォームの入力欄に `name` / `id` を付ける。`<label>` で包んであるので**アクセシビリティ上の
+      関連付けはできている**が、Chrome が `A form field element should have an id or name
+      attribute` を出す。パスワードマネージャの自動入力の効きが弱いのが実害
 
 ## Day 5 — 仕上げと Should
 
