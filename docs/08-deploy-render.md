@@ -67,6 +67,7 @@ databases:
     databaseName: django_prac
     user: django_prac
     plan: free
+    region: singapore                 # ★ API と同じリージョンにすること
 
 services:
   # --- Django API ---
@@ -217,9 +218,10 @@ LOGGING = { ... }   # console ハンドラに INFO 以上
 7.  ★ Google Cloud Console に戻り、「承認済みの JavaScript 生成元」に
       https://django-prac-web.onrender.com を追加する（06-auth.md の宿題）
 8.  両方を Manual Deploy で再デプロイ
-9.  API の Shell から初期データを投入
-      python manage.py loaddata libraries
-      python manage.py createsuperuser
+9.  ★ 初期データを投入する。**無料プランは Shell が使えない**ので、
+      External Database URL を使ってローカルから流す（後述「本番 DB に外部から接続する」）
+        docker compose exec -T -e DATABASE_URL="<external url>?sslmode=require" \
+          api python manage.py loaddata libraries
 10. 動作確認（下のチェックリスト）
 11. GitHub Actions 用に Deploy Hook の URL を 2 本取得（09-ci-cd.md）
 ```
@@ -243,7 +245,78 @@ LOGGING = { ... }   # console ハンドラに INFO 以上
 - [ ] Render のログにエラーが出ていない
 - [ ] **`/api/libraries/` がデータを返す** → `count: 0` なら DB が空。下の「本番 DB へのシード投入」へ
 
-## 本番 DB へのシード投入
+## 本番 DB に外部から接続する
+
+**Render の Postgres は External Database URL で外部から直接つながる。**
+無料プランは Shell 接続が使えないが、これがあれば実質的に何でもできる。
+シードの投入も、バックアップも、調査も、すべてここから行う。
+
+### 3 つの接続文字列の違い
+
+Render のダッシュボード（対象の DB → Connections）に 3 つ並んでいる。
+
+| | 用途 |
+|---|---|
+| **Internal Database URL** | **Render 内の同一リージョンのサービス間**。API が使うのはこれ（`render.yaml` の `fromDatabase` が自動で注入する）。外からは繋がらない |
+| **External Database URL** | **外部から**。TLS 必須。手元の作業はこれを使う |
+| **PSQL Command** | `render` CLI 経由で psql を開く |
+
+> **DB と API を同じリージョンに置くのはこのため。** 別リージョンだと Internal で
+> 繋がらず、外部経由になって遅くなる（`render.yaml` の `region` 参照）。
+
+### 使い方
+
+```bash
+DB="postgresql://<user>:<password>@<host>.singapore-postgres.render.com/<db>?sslmode=require"
+```
+
+**`?sslmode=require` を付ける。** Render の外部接続は TLS 必須。
+
+#### 1. 任意の manage.py コマンドを本番に対して流す
+
+ローカルの `api` コンテナから、接続先だけ差し替える。
+
+```bash
+docker compose exec -T -e DATABASE_URL="$DB" api python manage.py loaddata libraries
+docker compose exec -T -e DATABASE_URL="$DB" api python manage.py createsuperuser
+docker compose exec -it -e DATABASE_URL="$DB" api python manage.py shell
+```
+
+#### 2. バックアップを取る（無料プランで唯一の手段）
+
+**無料 Postgres はバックアップ非対応**なので、必要なら自分で取るしかない。
+
+```bash
+docker compose exec -T -e DATABASE_URL="$DB" api python manage.py dumpdata \
+    libraries accounts --indent 1 > backup.json
+```
+
+`pg_dump` を使うなら Postgres クライアントの入ったコンテナから:
+
+```bash
+docker run --rm postgres:16-alpine pg_dump "$DB" > backup.sql
+```
+
+**30 日の失効前に取っておくと、新しい DB に流し直せる。**
+
+#### 3. GUI クライアント / psql で直接覗く
+
+DataGrip や TablePlus に External URL をそのまま貼れば繋がる（SSL を有効にする）。
+クエリを直接叩いて調査できる。
+
+```bash
+docker compose exec -T db psql "$DB" -c "select count(*) from libraries_library;"
+```
+
+### 注意
+
+| | |
+|---|---|
+| **本番に直結している** | `migrate` / `flush` / `DELETE` は取り返しがつかない。**無料プランにバックアップは無い** |
+| **接続文字列は認証情報** | ファイルに書かず、その場のコマンド引数としてだけ使う。誤って共有したら Render でパスワードをローテーションする |
+| ローテーション後 | `DATABASE_URL` は `fromDatabase` で自動注入されるので、**API 側は設定変更なしで追従する**。再デプロイだけでよい |
+
+## シードの投入（上記の応用）
 
 **デプロイしてもデータは入らない。** 起動コマンドで走るのは `migrate` と
 `collectstatic` だけで、`loaddata` は含まれていない。
@@ -253,27 +326,9 @@ LOGGING = { ... }   # console ハンドラに INFO 以上
       → エンドポイントは出ている（= コードは反映済み）が、DB が空
 ```
 
-**無料プランは Shell 接続が使えない**ので、コンテナに入って流す手段がない。
-代わりに **External Database URL でローカルから流し込む。**
-
 ```bash
-# Render ダッシュボード → 対象の DB → "External Database URL" をコピー
-DB="postgresql://<user>:<password>@<host>.singapore-postgres.render.com/<db>?sslmode=require"
-
-# ローカルの api コンテナから、接続先だけ差し替えて実行する
 docker compose exec -T -e DATABASE_URL="$DB" api python manage.py loaddata libraries
-```
-
-| 注意点 | |
-|---|---|
-| **`?sslmode=require` を付ける** | Render の外部接続は TLS 必須 |
-| **接続文字列は認証情報** | ファイルに書かず、その場のコマンド引数としてだけ使う。誤って共有したら Render でパスワードをローテーションする |
-| ローテーション後 | `DATABASE_URL` は `render.yaml` の `fromDatabase` で自動注入されるので、**API 側は設定変更なしで追従する**。再デプロイだけでよい |
-
-投入後の確認:
-
-```bash
-curl -sS "https://<api>.onrender.com/api/libraries/?limit=500" | head -c 80
+curl -sS "https://<api>.onrender.com/api/libraries/?limit=500" | head -c 40
 # → {"count":490,"truncated":false,...}
 ```
 
