@@ -113,15 +113,21 @@ class Library(models.Model):
     smoking_status= models.CharField(
         max_length=20, choices=SmokingStatus.choices, db_index=True
     )
-    website       = models.URLField(blank=True)
-    data_source   = models.CharField(max_length=40, default="gsi_geocoding")
+    website       = models.URLField(max_length=300, blank=True)
+    osm_id        = models.CharField(max_length=32, blank=True, db_index=True)
+    data_source   = models.CharField(
+        max_length=20, choices=DataSource.choices, default=DataSource.OSM_OVERPASS
+    )
     created_at    = models.DateTimeField(auto_now_add=True)
     updated_at    = models.DateTimeField(auto_now=True)
 
     class Meta:
-        indexes = [models.Index(fields=["latitude", "longitude"])]
+        ordering = ["id"]
+        indexes = [models.Index(fields=["latitude", "longitude"], name="idx_library_latlng")]
         constraints = [
-            models.UniqueConstraint(fields=["name", "address"], name="uniq_library_name_address"),
+            models.UniqueConstraint(
+                fields=["name", "latitude", "longitude"], name="uniq_library_spot"
+            ),
         ]
 
 
@@ -140,8 +146,11 @@ class Favorite(models.Model):
 
 - **座標は `FloatField` ではなく `DecimalField(9, 6)`。** 小数 6 桁 ≒ 約 11cm の分解能で、日本国内の用途には十分。浮動小数の丸め誤差で `uniq` 判定や差分比較が揺れるのを避ける。
 - **`smoking_status` は boolean 2 本ではなく単一の enum。** 「加熱式のみ可」「紙巻きのみ可」を boolean 2 本（`allow_heated` / `allow_cigarette`）で表すこともできるが、元プロジェクトの仕様書でも「単純な boolean では表現できない」と整理されている。フィルタ UI が enum のほうが素直に書ける。
-- **`(name, address)` に UNIQUE 制約。** シード投入スクリプトを 2 回叩いても重複しないようにする（upsert のキー）。
-- **`data_source` を持つ。** 座標をどこから取ったかを行ごとに残す。元プロジェクトで Google Maps 由来の座標に保持期限の制約があった件と同じ発想で、**出所を後から追えるようにしておく**習慣をここで付けておく。今回は `gsi_geocoding` / `manual` / `osm` あたり。
+- **UNIQUE 制約は `(name, address)` ではなく `(name, latitude, longitude)`。**
+  当初は住所をキーにする想定だったが、実データでは**住所の充足率が 54% しかなかった**（後述）。
+  空文字が多いカラムを一意キーに含めると、別々の施設が衝突する。座標なら 100% 埋まっている。
+- **`data_source` を持つ。** 座標をどこから取ったかを行ごとに残す。元プロジェクトで Google Maps 由来の座標に保持期限の制約があった件と同じ発想で、**出所を後から追えるようにしておく**習慣をここで付けておく。実装では `osm_overpass` / `gsi_reverse` / `manual` の 3 値。
+- **`osm_id` を持つ。** OpenStreetMap 側の要素 ID（`node/416335894`）。元データを引き直したいときに追える。
 
 ## 喫煙区分のランダム割り当てについて
 
@@ -153,94 +162,81 @@ class Favorite(models.Model):
 
 ## シードデータの作り方
 
-**座標を手で書かない。** 実在の施設名に、確認していない緯度経度をでっち上げて commit すると、あとで「なんとなく合っている座標」がリポジトリに残り続ける。次の 3 段階で作る。
+> **⚠ この節は実装時に方針を変更した。** 当初は「名称と住所の CSV を人力で作り、
+> 国土地理院の住所検索で座標を引く」計画だったが、実際に調べたところ
+> **OpenStreetMap に東京都の図書館が 490 件、名称と座標が 100% 揃った状態**で
+> 存在したため、そちらに切り替えた。
+>
+> 当初 CSV 方式を採った理由は「確認していない座標をでっち上げないため」だったが、
+> 実測値をそのまま使う OSM のほうがその原則をより満たす。人力の CSV 作成（30 件で 30 分）も不要になった。
 
-### Step 1. 名称と住所の CSV を用意する — `backend/data/tokyo_libraries.csv`
+### 出所
 
-```csv
-name,ward,address,website
-東京都立中央図書館,港区,,
-千代田区立日比谷図書文化館,千代田区,,
-新宿区立中央図書館,新宿区,,
-...
-```
+| 項目 | 出所 | 充足率 |
+|---|---|---|
+| 名称・緯度経度 | **OpenStreetMap**（Overpass API） | 100%（490 件） |
+| website | 同上 | 20% |
+| 住所 | 同上（`addr:full` ほか） | 54% |
+| 区市町村 | `addr:city` → 名称から推定 → **国土地理院 逆ジオコーディング** | **100%**（66 種類） |
+| 喫煙区分 | 固定シードの擬似乱数 | **★ ダミー** |
 
-- 対象は**東京都の主要な区立・市立の中央図書館 30〜50 件**。
-- `address` は各図書館の公式サイトから転記する（ここは人力。30 件なら 30 分程度）。
-- 出典として `website` に公式ページの URL を入れておくと、後で検証しやすい。
+**★ OpenStreetMap のデータは ODbL。出典表示が義務**なので、UI に必ず明記する。
 
-候補（中央館クラス、区部を中心に）:
+### 区市町村を 3 段階で埋める理由
 
-<details>
-<summary>図書館名リスト（たたき台・住所は要記入）</summary>
-
-都立: 東京都立中央図書館 / 東京都立多摩図書館
-
-区部: 千代田区立日比谷図書文化館 / 中央区立京橋図書館 / 港区立みなと図書館 / 新宿区立中央図書館 / 文京区立真砂中央図書館 / 台東区立中央図書館 / 墨田区立ひきふね図書館 / 江東区立江東図書館 / 品川区立品川図書館 / 目黒区立目黒本町図書館 / 大田区立大田図書館 / 世田谷区立中央図書館 / 渋谷区立中央図書館 / 中野区立中央図書館 / 杉並区立中央図書館 / 豊島区立中央図書館 / 北区立中央図書館 / 荒川区立中央図書館 / 板橋区立中央図書館 / 練馬区立光が丘図書館 / 足立区立中央図書館 / 葛飾区立中央図書館 / 江戸川区立中央図書館
-
-市部: 武蔵野市立中央図書館 / 三鷹市立三鷹図書館 / 八王子市中央図書館 / 立川市中央図書館 / 府中市立中央図書館 / 調布市立中央図書館 / 町田市立中央図書館 / 小平市立中央図書館 / 日野市立中央図書館 / 西東京市立中央図書館
-
-> 名称は改称・移転がありうる。CSV に落とす前に各自治体の公式ページで現行名称を確認すること。
-
-</details>
-
-### Step 2. ジオコーディングして座標を埋める — `geocode_libraries`
-
-国土地理院の住所検索 API を使う。**API キー不要・無料**で、日本の住所に特化している。
+OSM の住所タグは充足率が低い（`addr:city` は 25%）。一方、日本の公立図書館は
+**名称に自治体名が入っている**ことが多い（「北区立中央図書館」→「北区」）。
 
 ```
-GET https://msearch.gsi.go.jp/address-search/AddressSearch?q=<住所>
-→ GeoJSON。features[0].geometry.coordinates が [経度, 緯度]
+① addr:city がある                    126 件 (25%)
+② 名称の先頭から推定  ^(.+?[区市町村])   255 件 (52%)
+③ 残りを国土地理院の逆ジオコーディング    109 件 (22%)
+                                    ─────────────
+                                    490 件 (100%)
 ```
+
+③ は `muniCd`（自治体コード）を返すので、国土地理院が公開する
+[`muni.js`](https://maps.gsi.go.jp/js/muni.js) の対応表で名称に変換する（`13101` → `千代田区`）。
+
+**③ だけで全件やらないのは、公共 API に 490 回叩く必要がないから。** ①② で 78% が
+埋まるので、残り 109 件・約 2 分で済む。
+
+### 実行
 
 ```bash
-docker compose exec api python manage.py geocode_libraries \
-    --input data/tokyo_libraries.csv \
-    --output apps/libraries/fixtures/libraries.json \
-    --dry-run
-```
+# まず件数と警告だけ確認（ファイルは書かない）
+docker compose exec api python manage.py fetch_libraries --dry-run --skip-reverse
 
-コマンドの要件:
+# 本番実行（逆ジオコーディングを含むので 2 分ほどかかる）
+docker compose exec api python manage.py fetch_libraries
 
-- 1 件ずつ順に問い合わせ、**リクエスト間に 1 秒のスリープを入れる**（公共 API への礼儀。30 件なら 30 秒で終わる）
-- 結果が 0 件、または座標が東京都の想定範囲（およそ 緯度 35.5〜35.9 / 経度 138.9〜139.9）から外れたら**その行を採用せず警告を出す**。黙って変な座標を入れない
-- `--dry-run` で件数と失敗行だけを表示し、ファイルは書かない
-- `smoking_status` はこの段階で固定シードの乱数で割り当てる
-- `data_source` に `gsi_geocoding` を入れる。手で直した行は `manual` に変える
-
-**生成された `libraries.json` は commit する。** 毎回ジオコーディングを走らせなくても `loaddata` だけで環境が再現できるようにするため。
-
-### Step 3. 投入
-
-```bash
+# 投入
 docker compose exec api python manage.py loaddata libraries
 ```
 
-fixture の形（Django 標準形式）:
+### コマンドの設計上の決めごと
 
-```json
-[
-  {
-    "model": "libraries.library",
-    "pk": 1,
-    "fields": {
-      "name": "東京都立中央図書館",
-      "name_kana": "",
-      "address": "（CSV から）",
-      "ward": "港区",
-      "latitude": "35.xxxxxx",
-      "longitude": "139.xxxxxx",
-      "smoking_status": "none",
-      "website": "",
-      "data_source": "gsi_geocoding",
-      "created_at": "2026-08-03T00:00:00Z",
-      "updated_at": "2026-08-03T00:00:00Z"
-    }
-  }
-]
-```
+| 決めごと | 理由 |
+|---|---|
+| **Overpass のミラーを 3 つ順に試す** | 公開インスタンスは混雑すると 429 / 504 を返す。実際に開発中 1 回踏んだ |
+| **逆ジオコーディングは 1 件 1 秒スリープ** | 公共 API への礼儀 |
+| **東京都の想定範囲外の座標は採用せず警告** | 黙って変な座標を入れない |
+| **`--dry-run` を用意** | 件数と失敗行だけ見てからファイルを書く |
+| **`created_at` / `updated_at` を fixture に含める** | `loaddata` は `save_base(raw=True)` で保存するため `auto_now_add` が効かない。**入れないと NOT NULL 違反で落ちる** |
+| **タイムスタンプは固定値** | `timezone.now()` にすると再生成のたびに全 490 行の diff が出る |
+| **喫煙区分は固定シードの乱数** | 再生成しても同じ結果になる |
 
-> `loaddata` は pk を固定するので冪等に近い挙動になる。何度流しても行は増えない。
+**生成した `libraries.json` は commit する。** 毎回 API を叩かなくても `loaddata` だけで
+環境を再現できるようにするため。無料 Postgres が 30 日で消えたときの復旧手段でもある。
+
+### 伊豆・小笠原諸島について
+
+東京都は**伊豆諸島・小笠原諸島まで含む**。取得結果の最南端は緯度 32.46（青ヶ島）で、
+これは誤りではない。
+
+そのため `TOKYO_BOUNDS` は都心だけでなく島嶼部を含む広い範囲にしてある。
+一方で地図の初期表示は東京駅中心なので、島の図書館は bbox から自然に外れる。
+**この挙動はテストで固定してある**（`test_bbox_excludes_izu_islands`）。
 
 ## 検索クエリの方針
 

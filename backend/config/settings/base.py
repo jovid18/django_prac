@@ -40,6 +40,7 @@ INSTALLED_APPS = [
     # 自作
     "apps.core",
     "apps.accounts",
+    "apps.libraries",
 ]
 
 MIDDLEWARE = [

@@ -82,9 +82,22 @@
 
 > **Day 1 が終わった時点で、残りは「機能を足す」だけになる。** インフラ由来の問題はここで全部踏んである。
 
-## Day 2 — データ
+## Day 2 — データ ✅
 
-- [ ] `Library` / `Favorite` モデルを作る（`04-data-model.md`）
+- [x] `Library` / `Favorite` モデルを作る（`04-data-model.md`）
+- [x] **データ取得方針を変更**: CSV 人力入力 → **OpenStreetMap (Overpass API)**
+      - 490 件、名称と座標が 100%。**人力の CSV 作成が不要になった**
+      - 区市町村は `addr:city` → 名称推定 → 国土地理院 逆ジオコーディングの 3 段で 100%
+- [x] `fetch_libraries` コマンド（ミラー 3 つのフォールバック / `--dry-run` / 範囲外の警告）
+- [x] fixture 生成 → commit → `loaddata` で 490 件投入
+- [x] Django Admin で確認
+- [x] `GET /api/libraries/`（bbox / smoking / ward / q / limit + `truncated`）
+- [x] `GET /api/libraries/{id}/`
+- [x] テスト 36 件（うち libraries 27 件）
+
+<details>
+<summary>当初の計画（CSV 方式）— 参考として残す</summary>
+
 - [ ] `backend/data/tokyo_libraries.csv` に図書館名と住所を埋める（30〜50 件、人力）
 - [ ] `geocode_libraries` コマンドを書く
       - GSI の住所検索 API を叩く
@@ -96,6 +109,8 @@
 - [ ] Django Admin で中身を目視確認
 - [ ] `GET /api/libraries/` と `GET /api/libraries/{id}/` を実装
 - [ ] bbox / smoking フィルタのテストを書く
+
+</details>
 
 ## Day 3 — 地図
 
