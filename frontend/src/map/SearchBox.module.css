@@ -1,0 +1,147 @@
+/* 幅は喫煙区分フィルタ（min-width: 168px）より広めに取る。
+   375px でも画面からはみ出さないように calc で上限を掛ける。 */
+.wrap {
+  position: relative;
+  width: min(280px, calc(100vw - 20px));
+}
+
+.field {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 8px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--bg) 88%, transparent);
+  backdrop-filter: blur(8px);
+  box-shadow: 0 2px 10px rgb(0 0 0 / 18%);
+}
+
+.icon {
+  flex: none;
+  color: var(--sub);
+}
+
+.input {
+  min-width: 0;
+  flex: 1;
+  /* 44px には届かないが、地図の上に載せる帯なのでこの高さに揃えている */
+  height: 34px;
+  border: 0;
+  background: none;
+  color: var(--fg);
+  font: inherit;
+  font-size: 13px;
+}
+
+.input:focus {
+  outline: none;
+}
+
+.field:focus-within {
+  border-color: color-mix(in srgb, var(--fg) 45%, var(--line));
+}
+
+/* type="search" の既定のクリアボタンを消す。自前の × と二重に出るため。 */
+.input::-webkit-search-cancel-button {
+  display: none;
+}
+
+.clear {
+  flex: none;
+  padding: 0 2px;
+  border: 0;
+  background: none;
+  color: var(--sub);
+  font-size: 16px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+/* --- 結果パネル ---------------------------------------------------------- */
+
+/* 喫煙区分フィルタの上に重ねる。押し下げると 375px で地図がほとんど見えなくなる。 */
+.panel {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  left: 0;
+  z-index: 1;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--bg) 94%, transparent);
+  backdrop-filter: blur(8px);
+  box-shadow: 0 4px 18px rgb(0 0 0 / 22%);
+}
+
+.message {
+  margin: 0;
+  padding: 10px 12px;
+  color: var(--sub);
+  font-size: 12px;
+}
+
+.message[data-tone='error'] {
+  color: var(--ng);
+}
+
+.list {
+  /* 上限 20 件でも縦に伸び切らないように。中身だけスクロールさせる。 */
+  max-height: min(320px, 40dvh);
+  overflow-y: auto;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.item {
+  display: grid;
+  gap: 1px;
+  width: 100%;
+  padding: 7px 12px;
+  border: 0;
+  border-bottom: 1px solid color-mix(in srgb, var(--line) 60%, transparent);
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.item:hover,
+.item:focus-visible {
+  background: color-mix(in srgb, var(--fg) 8%, transparent);
+  outline: none;
+}
+
+.itemName {
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+
+.itemMeta {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--sub);
+  font-size: 11px;
+}
+
+.dot {
+  flex: none;
+  width: 8px;
+  height: 8px;
+  border: 1.5px solid #fff;
+  border-radius: 50%;
+  box-shadow: 0 0 0 1px rgb(0 0 0 / 25%);
+}
+
+.note {
+  margin: 0;
+  padding: 6px 12px;
+  border-top: 1px solid var(--line);
+  color: var(--sub);
+  font-size: 10px;
+  line-height: 1.4;
+}
