@@ -67,6 +67,7 @@ databases:
     databaseName: django_prac
     user: django_prac
     plan: free
+    region: singapore                 # ★ API と同じリージョンにすること
 
 services:
   # --- Django API ---
@@ -217,9 +218,10 @@ LOGGING = { ... }   # console ハンドラに INFO 以上
 7.  ★ Google Cloud Console に戻り、「承認済みの JavaScript 生成元」に
       https://django-prac-web.onrender.com を追加する（06-auth.md の宿題）
 8.  両方を Manual Deploy で再デプロイ
-9.  API の Shell から初期データを投入
-      python manage.py loaddata libraries
-      python manage.py createsuperuser
+9.  ★ 初期データを投入する。**無料プランは Shell が使えない**ので、
+      External Database URL を使ってローカルから流す（後述「本番 DB に外部から接続する」）
+        docker compose exec -T -e DATABASE_URL="<external url>?sslmode=require" \
+          api python manage.py loaddata libraries
 10. 動作確認（下のチェックリスト）
 11. GitHub Actions 用に Deploy Hook の URL を 2 本取得（09-ci-cd.md）
 ```
@@ -241,12 +243,120 @@ LOGGING = { ... }   # console ハンドラに INFO 以上
 - [ ] 「現在地」ボタンが動く → HTTPS なので Geolocation が使える
 - [ ] 無限リダイレクトしていない → `SECURE_PROXY_SSL_HEADER`
 - [ ] Render のログにエラーが出ていない
+- [ ] **`/api/libraries/` がデータを返す** → `count: 0` なら DB が空。下の「本番 DB へのシード投入」へ
+
+## 本番 DB に外部から接続する
+
+**Render の Postgres は External Database URL で外部から直接つながる。**
+無料プランは Shell 接続が使えないが、これがあれば実質的に何でもできる。
+シードの投入も、バックアップも、調査も、すべてここから行う。
+
+### 3 つの接続文字列の違い
+
+Render のダッシュボード（対象の DB → Connections）に 3 つ並んでいる。
+
+| | 用途 |
+|---|---|
+| **Internal Database URL** | **Render 内の同一リージョンのサービス間**。API が使うのはこれ（`render.yaml` の `fromDatabase` が自動で注入する）。外からは繋がらない |
+| **External Database URL** | **外部から**。TLS 必須。手元の作業はこれを使う |
+| **PSQL Command** | `render` CLI 経由で psql を開く |
+
+> **DB と API を同じリージョンに置くのはこのため。** 別リージョンだと Internal で
+> 繋がらず、外部経由になって遅くなる（`render.yaml` の `region` 参照）。
+
+### 使い方
+
+```bash
+DB="postgresql://<user>:<password>@<host>.singapore-postgres.render.com/<db>?sslmode=require"
+```
+
+**`?sslmode=require` を付ける。** Render の外部接続は TLS 必須。
+
+#### 1. 任意の manage.py コマンドを本番に対して流す
+
+ローカルの `api` コンテナから、接続先だけ差し替える。
+
+```bash
+docker compose exec -T -e DATABASE_URL="$DB" api python manage.py loaddata libraries
+docker compose exec -T -e DATABASE_URL="$DB" api python manage.py createsuperuser
+docker compose exec -it -e DATABASE_URL="$DB" api python manage.py shell
+```
+
+#### 2. バックアップを取る（無料プランで唯一の手段）
+
+**無料 Postgres はバックアップ非対応**なので、必要なら自分で取るしかない。
+
+```bash
+docker compose exec -T -e DATABASE_URL="$DB" api python manage.py dumpdata \
+    libraries accounts --indent 1 > backup.json
+```
+
+`pg_dump` を使うなら Postgres クライアントの入ったコンテナから:
+
+```bash
+docker run --rm postgres:16-alpine pg_dump "$DB" > backup.sql
+```
+
+**30 日の失効前に取っておくと、新しい DB に流し直せる。**
+
+#### 3. GUI クライアント / psql で直接覗く
+
+DataGrip や TablePlus に External URL をそのまま貼れば繋がる（SSL を有効にする）。
+クエリを直接叩いて調査できる。
+
+```bash
+docker compose exec -T db psql "$DB" -c "select count(*) from libraries_library;"
+```
+
+### 注意
+
+| | |
+|---|---|
+| **本番に直結している** | `migrate` / `flush` / `DELETE` は取り返しがつかない。**無料プランにバックアップは無い** |
+| **接続文字列は認証情報** | ファイルに書かず、その場のコマンド引数としてだけ使う。誤って共有したら Render でパスワードをローテーションする |
+| ローテーション後 | `DATABASE_URL` は `fromDatabase` で自動注入されるので、**API 側は設定変更なしで追従する**。再デプロイだけでよい |
+
+## シードの投入（上記の応用）
+
+**デプロイしてもデータは入らない。** 起動コマンドで走るのは `migrate` と
+`collectstatic` だけで、`loaddata` は含まれていない。
+
+```
+症状: GET /api/libraries/ が {"count":0,"truncated":false,"results":[]} を返す
+      → エンドポイントは出ている（= コードは反映済み）が、DB が空
+```
+
+```bash
+docker compose exec -T -e DATABASE_URL="$DB" api python manage.py loaddata libraries
+curl -sS "https://<api>.onrender.com/api/libraries/?limit=500" | head -c 40
+# → {"count":490,"truncated":false,...}
+```
+
+### 起動コマンドに `loaddata` を入れなかった理由
+
+`dockerCommand` に足せば自動化できそうに見えるが、**無料プランでは悪手**。
+
+無料 Web Service は 15 分でスリープし、**起きるたびにコンテナが再起動して
+起動コマンドが再実行される。** つまり起床のたびに 490 行を書き直すことになる。
+1 日に何十回も起こりうる。
+
+fixture の pk は固定なので重複はしないが、無駄な書き込みが増えるだけ。
+
+### 30 日ごとに再投入が必要
+
+無料 Postgres は 30 日で失効し、猶予 14 日の後にデータごと消える。
+新しい DB を作ったら上のコマンドをもう一度流す。
+
+自動化したい場合は **「テーブルが空のときだけシードする」** コマンドを作って
+起動コマンドに足す。起動ごとのコストは `SELECT EXISTS` 1 回で済むので、
+上記の問題を避けつつ DB 再作成に自動で追従できる。
 
 ## よくあるエラーと原因
 
 | 症状 | 原因 |
 |---|---|
 | **リクエストの半分くらいが 404 になる**（ログにはエラーが出ていない） | **ヘルスチェックと `SECURE_SSL_REDIRECT` の衝突。** 下記 |
+| API は動くが `count: 0` しか返らない | **DB にシードを入れていない。** デプロイでは `loaddata` は走らない（上記） |
 | `DisallowedHost at /` | `DJANGO_ALLOWED_HOSTS` 未設定 or ホスト名が違う |
 | ブラウザ Console に `blocked by CORS policy` | `FRONTEND_ORIGIN` の値が違う（末尾スラッシュが余計、`http`/`https` の取り違え） |
 | リダイレクトが多すぎる | `SECURE_PROXY_SSL_HEADER` の設定漏れ |
