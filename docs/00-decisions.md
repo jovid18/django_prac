@@ -158,6 +158,92 @@ Django の認証は層が分かれていて、**セッションは必須では�
 
 「React は最新版で」という要望に沿って、フロント側は最新を採る。
 
+## 地図: MapLibre + 地理院タイル → **Google Maps に変更**（2026-08-03 / Day 3 の前）
+
+**結論**
+
+| | 変更前 | 変更後 |
+|---|---|---|
+| 地図エンジン | MapLibre GL JS 6.1.0 | **Google Maps JavaScript API** |
+| React ラッパ | `react-map-gl` 8.1.2 | **`@vis.gl/react-google-maps` 1.9.0** |
+| クラスタリング | MapLibre の GeoJSON `cluster: true` | **`supercluster` 8.0.1**（下記の理由で `@googlemaps/markerclusterer` から変更） |
+| タイル | 国土地理院 淡色ラスター | Google |
+| キー / 課金 | どちらも不要 | **API キーと課金アカウントが必要** |
+
+### 変えた理由は「見た目」。ただし実際に描画して比べた
+
+`01-overview.md` で MapLibre + 地理院タイルを選んだ根拠は「キーもクレジットカードも不要」だった。
+これは今も正しい。**変えたのは、地理院の淡色ラスターがアプリの主画面としては見劣りしたから。**
+
+推測で決めないために、同じ視点（東京駅 z12.4）に候補を並べて描画し、ダミーのピンを載せて比較した。
+
+| 候補 | 描画 | ラベル | キー | 結果 |
+|---|---|---|---|---|
+| 地理院 淡色ラスター（変更前） | ○ | 日本語 | 不要 | 実用的だが素っ気ない |
+| OpenFreeMap Liberty（ラベル日本語化） | ○ | 日本語 | 不要 | **無料の中では最良。Google に近い** |
+| OpenFreeMap positron / dark / fiord | ○ | 併記 | 不要 | ダークの相方が同じ提供元にある |
+| CARTO Positron / Dark Matter / Voyager | ○ | z13 未満は英字 | 不要 | 仕上げは綺麗 |
+| 地理院 最適化ベクトル | **×（白紙）** | 日本語 | 不要 | スタイルが `pmtiles://` を使う。`pmtiles` パッケージが別途必要 |
+| VersaTiles colorful / eclipse | **×** | — | 不要 | タイル配信が接続を切る（`ERR_CONNECTION_RESET`） |
+
+**その上で Google を選んだ。** 日本の施設・道路の見え方と利用者の慣れが、無料であることより優先だと判断した。
+
+### 受け入れたコスト（ここを忘れると事故になる）
+
+| 項目 | 内容 |
+|---|---|
+| 課金アカウント | **必須。** Cloud プロジェクトを作る時点で billing account が要る（無料枠の内側でも） |
+| 無料枠 | Dynamic Maps（地図ロード）は **Essentials で月 10,000 回まで無料**。超過は 1,000 回あたり $7 から。練習用の流量なら収まる |
+| **キーの露出** | `VITE_` 変数はバンドルに埋まる。**OAuth クライアント ID と違い、Maps のキーは課金に直結する。** Cloud Console で「HTTP リファラー制限」＋「Maps JavaScript API のみ」を必ず設定する。制限の無いキーを晒すと他人の利用が自分の請求に乗る |
+| Map ID | Advanced Markers に**必須**。ローカルは Google 提供の `DEMO_MAP_ID` で足りる |
+
+### 実装前に確認した事実（パッケージのメタデータと dist を直接読んだ）
+
+| 確認項目 | 結果 |
+|---|---|
+| `@vis.gl/react-google-maps` 1.9.0 の peer | `react >=16.8 \|\| ^19.0` → **React 19.2 で問題なし** |
+| 型定義 | `@types/google.maps` を**依存に同梱**。別途インストール不要 |
+| ダークモード | `ColorScheme` を export（`LIGHT` / `DARK` / `FOLLOW_SYSTEM`） |
+| ⚠ その制約 | `colorScheme` は**地図の初期化時にしか設定できない**。実行中に切り替えるには地図を作り直す（再マウント）必要がある |
+| bbox 再取得のきっかけ | `onIdle` / `onBoundsChanged` / `onCameraChanged` を props で受けられる。**MapLibre の `moveend` + 手書きデバウンスより素直** |
+| `@googlemaps/markerclusterer` 2.6.2 | `AdvancedMarkerElement` 対応。内部は `supercluster`。**ただし実装時に外した（下記）** |
+| 提供元 | `react-map-gl` と**同じ vis.gl チーム**。API の作りが似ているので乗り換えの学習コストが低い |
+
+### 副作用: バンドルが小さくなった（実測）
+
+Maps JS API は Google の CDN から実行時に読み込まれるので、アプリのバンドルには入らない。
+
+```
+MapLibre 構成:  index.js 1,181 kB (gzip 317 kB) + CSS 70.7 kB + worker 468 kB
+Google 構成:    index.js   191 kB (gzip  61 kB) + CSS  0.9 kB
+```
+
+「地図が無い画面（ログイン・お気に入り）でも地図エンジンを丸ごと読ませてしまう」問題が消えたので、
+**`MapPage` の遅延読み込み（`React.lazy`）は必須ではなくなった。** 必要になったら入れる。
+
+### 失う練習項目と、その代替
+
+| MapLibre で触るはずだった論点 | Google での対応物 |
+|---|---|
+| スタイル JSON（`StyleSpecification`） | Cloud ベースのマップスタイル（Map ID に紐づく。コードではなく管理画面） |
+| GeoJSON ソース + `circle` レイヤー | `AdvancedMarker`（DOM） |
+| 内蔵クラスタリング | `supercluster` を直接使う（MapLibre の `cluster: true` も中身はこれ） |
+| `moveend` + デバウンス | `onIdle`（操作が落ち着いてから 1 回発火） |
+
+**ベクトルタイル・スタイル仕様そのものの練習は落ちる。** そこは元プロジェクトでも Google Maps を使う前提なので、
+今回は取りに行かない。
+
+### MapLibre 側で分かったこと（戻す時のために残す）
+
+一度 MapLibre 6 で組んで通したので、その知見を捨てずに書いておく。
+
+| 事実 | 影響 |
+|---|---|
+| `maplibre-gl` 6.0.0 は 2026-07-22 リリース。**ESM 専用**（UMD / CSP バンドルは廃止） | `import maplibregl from` は動かない。`import * as maplibregl` か名前付き import |
+| v6 は `map.transform` を削除、イベントをクラス化 | ラッパが追従していないと壊れる。`@vis.gl/react-maplibre` 8.1.2 は `utils/transform.js` で v4/v5/v6 を吸収済み（確認済み） |
+| **バンドラでは `setWorkerUrl()` が必須** | Vite は `import workerUrl from 'maplibre-gl/dist/maplibre-gl-worker.mjs?worker&url'`。**`?url` だと本番ビルドで worker が兄弟モジュールを失って死ぬ**（dev では動くので気付きにくい） |
+| `react-map-gl` 8 は別名パッケージ | 依存は `@vis.gl/react-mapbox` と `@vis.gl/react-maplibre` だけ。ルート export が無く `react-map-gl/maplibre` からしか import できない。**MapLibre だけなら `@vis.gl/react-maplibre` を直接使う** |
+
 ## Render の無料枠（確認済みの制約）
 
 **ここが本構成で最も強い制約。** `08-deploy-render.md` に反映済み。
@@ -197,6 +283,7 @@ Render には[公式の Terraform プロバイダ](https://render.com/docs/terra
 | 項目 | 状態 |
 |---|---|
 | 独自ドメイン | **買わない**（`08-deploy-render.md` に理由） |
+| 独自の地図スタイル（Map ID） | 後回し。まず `DEMO_MAP_ID` で進め、配色を触りたくなったら Cloud Console で作る |
 | Terraform | **使わない**（上記） |
 | Render のリージョン | Blueprint に `singapore` と書いているが、作成時に選択肢を確認する |
 | E2E テスト（Playwright） | Should。Day 5 に余裕があれば |
@@ -208,3 +295,5 @@ Render には[公式の Terraform プロバイダ](https://render.com/docs/terra
 |---|---|
 | 2026-08-03 | 初版。Day 0 の調査に基づき全バージョンを確定 |
 | 2026-08-03 | **Django を 5.2 LTS → 6.0 に変更。** 5.2 を選んだ根拠（simplejwt の 5.2 非対応疑い）が誤りだったため撤回。フロントと揃えて最新を採る |
+| 2026-08-03 | **地図を MapLibre + 地理院タイル → Google Maps に変更。** 候補を実際に並べて描画した結果、見た目を優先。キーと課金アカウントが必要になる点を受け入れた（上の節） |
+| 2026-08-03 | `frontend/tsconfig.app.json` に **`strict: true` を追加**。文書には「テンプレートで有効」と書いていたが実際には入っていなかった |

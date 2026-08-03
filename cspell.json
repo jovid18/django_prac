@@ -4,7 +4,9 @@
   "words": [
     "allauth",
     "astral",
+    "cartocdn",
     "citext",
+    "clusterer",
     "corsheaders",
     "createsuperuser",
     "cyberjapandata",
@@ -23,16 +25,21 @@
     "libpq",
     "makemigrations",
     "maplibre",
+    "markerclusterer",
     "maxzoom",
     "minzoom",
     "moveend",
     "noreferrer",
     "onrender",
+    "openfreemap",
+    "OpenFreeMap",
     "openstreetmap",
     "pathlib",
     "pgdata",
-    "postgis",
+    "pmtiles",
+    "positron",
     "PostGIS",
+    "postgis",
     "prac",
     "psql",
     "psycopg",
@@ -41,6 +48,7 @@
     "pytest",
     "PYTHONDONTWRITEBYTECODE",
     "PYTHONUNBUFFERED",
+    "Referer",
     "Rolldown",
     "runserver",
     "simplejwt",
@@ -51,9 +59,16 @@
     "supercluster",
     "tanstack",
     "urlpatterns",
+    "VersaTiles",
+    "VITE",
     "vitejs",
     "whitenoise",
     "wsgi"
   ],
-  "ignorePaths": ["node_modules/**", ".git/**", "uv.lock", "package-lock.json"]
+  "ignorePaths": [
+    "node_modules/**",
+    ".git/**",
+    "uv.lock",
+    "package-lock.json"
+  ]
 }

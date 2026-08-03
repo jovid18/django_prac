@@ -53,6 +53,10 @@ services:
       # 空 = 相対パス。Vite の proxy が /api を api:8000 に転送する。
       VITE_API_BASE_URL: ""
       VITE_GOOGLE_OAUTH_CLIENT_ID: ${GOOGLE_OAUTH_CLIENT_ID:-}
+      # 地図。キーが無いと Maps JS API は読み込めない（docs/07-frontend.md）。
+      VITE_GOOGLE_MAPS_API_KEY: ${GOOGLE_MAPS_API_KEY:-}
+      # 空なら Google 提供の DEMO_MAP_ID にフォールバックする（frontend/src/env.ts）。
+      VITE_GOOGLE_MAPS_MAP_ID: ${GOOGLE_MAPS_MAP_ID:-}
       VITE_PROXY_TARGET: http://api:8000
     volumes:
       - ./frontend:/app

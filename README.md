@@ -17,7 +17,7 @@
 | バックエンド | Django 6.0 + DRF 3.17（Python 3.13） |
 | Python 依存管理 | uv（`uv.lock`） |
 | DB | PostgreSQL 16 |
-| 地図 | MapLibre GL JS + 国土地理院タイル |
+| 地図 | Google Maps JavaScript API（`@vis.gl/react-google-maps`） |
 | 認証 | JWT + Google ID トークン検証 |
 | ローカル | docker compose（db / api / web） |
 | デプロイ | Render.com（Static Site + Web Service + Postgres） |

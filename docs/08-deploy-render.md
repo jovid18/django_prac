@@ -114,6 +114,10 @@ services:
         sync: false                   # 初回デプロイ後に API の URL を入れる
       - key: VITE_GOOGLE_OAUTH_CLIENT_ID
         sync: false
+      - key: VITE_GOOGLE_MAPS_API_KEY
+        sync: false                   # ⚠ 課金に直結。リファラー制限を掛けてから入れる
+      - key: VITE_GOOGLE_MAPS_MAP_ID
+        sync: false
     routes:
       - type: rewrite                 # ← SPA のクライアントルーティングに必須
         source: /*
@@ -156,6 +160,8 @@ services:
 |---|---|
 | `VITE_API_BASE_URL` | `https://django-prac-api.onrender.com` |
 | `VITE_GOOGLE_OAUTH_CLIENT_ID` | Google Cloud の値 |
+| `VITE_GOOGLE_MAPS_API_KEY` | Google Cloud の値。**入れる前に Cloud Console でリファラー制限に本番 URL（`https://django-prac-web.onrender.com/*`）を追加する** |
+| `VITE_GOOGLE_MAPS_MAP_ID` | 自前の Map ID。未設定なら `DEMO_MAP_ID` が使われる |
 
 > **フロントの環境変数はビルド時に埋め込まれる。** 変更したら**必ず再デプロイ（再ビルド）する**こと。環境変数を書き換えただけでは反映されない — Static Site 特有の引っかかりポイント。
 
@@ -215,8 +221,12 @@ LOGGING = { ... }   # console ハンドラに INFO 以上
 6.  フロントの環境変数に入力
       VITE_API_BASE_URL             = https://django-prac-api.onrender.com
       VITE_GOOGLE_OAUTH_CLIENT_ID   = （同上）
-7.  ★ Google Cloud Console に戻り、「承認済みの JavaScript 生成元」に
-      https://django-prac-web.onrender.com を追加する（06-auth.md の宿題）
+      VITE_GOOGLE_MAPS_API_KEY      = （Maps のキー。先に手順 7 の制限を入れる）
+      VITE_GOOGLE_MAPS_MAP_ID       = （未作成なら空でよい = DEMO_MAP_ID）
+7.  ★ Google Cloud Console に戻り、本番 URL を 2 か所に追加する
+      - OAuth:「承認済みの JavaScript 生成元」に https://django-prac-web.onrender.com（06-auth.md の宿題）
+      - Maps のキー:「HTTP リファラー制限」に https://django-prac-web.onrender.com/*
+        （制限に本番 URL が無いと、本番で地図が RefererNotAllowedMapError になる）
 8.  両方を Manual Deploy で再デプロイ
 9.  ★ 初期データを投入する。**無料プランは Shell が使えない**ので、
       External Database URL を使ってローカルから流す（後述「本番 DB に外部から接続する」）
@@ -234,7 +244,8 @@ LOGGING = { ... }   # console ハンドラに INFO 以上
 
 - [ ] `https://<api>.onrender.com/api/health/` が `200` を返す
 - [ ] `https://<api>.onrender.com/admin/` が**CSS ありで**表示される → WhiteNoise が効いている
-- [ ] フロントを開いて地図が表示される → GSI タイルが読めている
+- [ ] フロントを開いて地図が表示される → Maps のキーとリファラー制限が正しい
+      （出ない場合は Console のエラーを見る: `InvalidKeyMapError` / `RefererNotAllowedMapError` / `BillingNotEnabledMapError`）
 - [ ] 図書館のピンが表示される → **CORS が通っている**（DevTools の Console にエラーが無い）
 - [ ] `/login` を**ブラウザで直接開いて** 404 にならない → `routes: rewrite` が効いている
 - [ ] メール + パスワードで登録・ログインできる

@@ -65,6 +65,8 @@ services:
     environment:
       VITE_API_BASE_URL: ""                     # 空 = 相対パス。Vite の proxy に任せる
       VITE_GOOGLE_OAUTH_CLIENT_ID: ${GOOGLE_OAUTH_CLIENT_ID}
+      VITE_GOOGLE_MAPS_API_KEY: ${GOOGLE_MAPS_API_KEY}      # 無いと地図が出ない
+      VITE_GOOGLE_MAPS_MAP_ID: ${GOOGLE_MAPS_MAP_ID}        # 空なら DEMO_MAP_ID
     volumes:
       - ./frontend:/app
       - /app/node_modules      # ホストの node_modules で上書きされないようにする
@@ -240,13 +242,19 @@ docker compose exec db psql -U postgres -d django_prac
 | `/api/...` が 404 | Vite の proxy が効いていない | `vite.config.ts` の `proxy.target` と `docker compose logs api` を確認 |
 | マイグレーションを当てても反映されない | ホストとコンテナで別の DB を見ている | `DATABASE_URL` のホスト名が `db` になっているか確認（`localhost` だとコンテナ自身を指す） |
 | ホットリロードが効かない | ボリュームマウントの漏れ | `volumes: - ./backend:/app` があるか確認 |
-| 地図が真っ白 | タイル URL の誤り、またはネットワーク遮断 | DevTools の Network で `cyberjapandata.gsi.go.jp` へのリクエストを確認 |
+| 地図が真っ白 | Maps のキーが無い / 制限に弾かれた / 課金未設定 | DevTools の Console を見る。`InvalidKeyMapError`（キー未設定）/ `RefererNotAllowedMapError`（リファラー制限に `http://localhost:5173/*` が無い）/ `BillingNotEnabledMapError`（課金未設定） |
+| 地図が潰れて線になる | 親要素の高さが 0 | `<Map>` の親に高さを与える（`height: 100dvh` など） |
+| **ファイルを削除した瞬間に `web` が落ちる** | Vite 8 の dev server が HMR 中の削除で `ENOENT` を unhandled error にして exit する | `docker compose up -d web` で起こし直す。作業ファイルを消すときは dev server を止めてからのほうが安全 |
 
 ## `.env.example`（リポジトリに commit するもの）
 
 ```bash
 # --- 共通 ---
 GOOGLE_OAUTH_CLIENT_ID=
+
+# --- 地図（Day 3 以降。無いと地図が表示されない）---
+GOOGLE_MAPS_API_KEY=
+GOOGLE_MAPS_MAP_ID=             # 空なら DEMO_MAP_ID にフォールバック
 
 # --- backend（compose が渡す。ローカル値は docker-compose.yml に直書きでよい）---
 # DJANGO_SECRET_KEY=
@@ -257,3 +265,6 @@ GOOGLE_OAUTH_CLIENT_ID=
 ```
 
 > **`GOOGLE_OAUTH_CLIENT_ID` はクライアント ID なので公開されても問題ない**（ブラウザに埋まる値）。一方 **client secret は今回の構成では一切使わない** — 理由は `06-auth.md` を参照。
+
+> ⚠ **`GOOGLE_MAPS_API_KEY` は同じ「公開される値」だが、こちらは課金に直結する。**
+> Cloud Console で「HTTP リファラー制限 + Maps JavaScript API のみ」を掛けてから使う（`00-decisions.md`）。

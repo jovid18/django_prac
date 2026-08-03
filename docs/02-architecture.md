@@ -14,12 +14,12 @@ flowchart LR
     A["api<br/>Django runserver :8000"]
     D[("db<br/>PostgreSQL :5432")]
   end
-  T["国土地理院タイル<br/>cyberjapandata.gsi.go.jp"]
+  G["Google Maps JS API<br/>maps.googleapis.com"]
 
   B --> W
   W -->|"/api/* をプロキシ"| A
   A --> D
-  B -->|"地図タイル"| T
+  B -->|"地図（スクリプト + タイル）"| G
 ```
 
 - ブラウザが見るのは **`localhost:5173` の一箇所だけ**。
@@ -34,12 +34,12 @@ flowchart LR
   S["Render Static Site<br/>React のビルド成果物<br/>*.onrender.com"]
   A["Render Web Service<br/>Django + Gunicorn (Docker)<br/>*.onrender.com"]
   D[("Render PostgreSQL")]
-  T["国土地理院タイル"]
+  G["Google Maps JS API"]
 
   B --> S
   B -->|"XHR（クロスオリジン）"| A
   A --> D
-  B -->|"地図タイル"| T
+  B -->|"地図（スクリプト + タイル）"| G
 ```
 
 - フロントと API が**別ホスト**になる → **CORS の設定が必須**。
@@ -187,8 +187,8 @@ DATABASES = {"default": dj_database_url.config(conn_max_age=600)}  # DATABASE_UR
 |---|---|
 | `react`, `react-dom` | 本体 |
 | `react-router` | ルーティング |
-| `maplibre-gl` | 地図エンジン |
-| `react-map-gl` | MapLibre の React ラッパ（`react-map-gl/maplibre`） |
+| `@vis.gl/react-google-maps` | Google Maps JS API の React ラッパ（`@types/google.maps` を同梱） |
+| `supercluster` | マーカーのクラスタリング。**マーカー要素ではなく API の座標から計算する**（理由は `07-frontend.md`） |
 | `@tanstack/react-query` | サーバ状態のキャッシュ（地図を動かすたびに再取得するので効く） |
 | `zod` | API レスポンスの検証（任意だが推奨） |
 | `typescript`, `vite`, `@vitejs/plugin-react` | ビルド |
@@ -202,4 +202,5 @@ DATABASES = {"default": dj_database_url.config(conn_max_age=600)}  # DATABASE_UR
 2. 地図の表示範囲（bbox）が変わるたびに `GET /api/libraries/?bbox=...&smoking=...` を呼ぶ。
 3. Django が緯度経度の範囲条件で検索し、JSON を返す。
 4. フロントがマーカーを差し替える。マーカーをクリックすると詳細パネルを開く。
-5. 地図タイルはブラウザが**国土地理院から直接**取得する（サーバを経由しない）。
+5. 地図のスクリプトとタイルはブラウザが**Google から直接**取得する（自分のサーバを経由しない）。
+   そのため **API キーはブラウザに出る**前提で、Cloud Console 側のリファラー制限で守る（`00-decisions.md`）。

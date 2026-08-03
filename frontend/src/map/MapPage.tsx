@@ -1,0 +1,134 @@
+import { APIProvider, ControlPosition, MapControl } from '@vis.gl/react-google-maps'
+import { useState } from 'react'
+
+import { env } from '../env'
+import type { LibraryListItem, SmokingStatus } from '../types/api'
+import { LibraryMarkers } from './LibraryMarkers'
+import { LibraryPanel } from './LibraryPanel'
+import { LocateControl } from './LocateControl'
+import styles from './MapPage.module.css'
+import { MapPlaceholder, MapView, type MapViewState } from './MapView'
+import { SmokingFilter } from './SmokingFilter'
+import { MIN_FETCH_ZOOM, useLibraries } from './useLibraries'
+
+export function MapPage() {
+  const [view, setView] = useState<MapViewState | null>(null)
+  const [smoking, setSmoking] = useState<SmokingStatus[]>([])
+  const [selected, setSelected] = useState<LibraryListItem | null>(null)
+
+  const { data, isFetching, isError, refetch, zoomTooLow } = useLibraries(view, smoking)
+  const items = data?.results ?? []
+
+  return (
+    <div className={styles.page}>
+      <header className={styles.header}>
+        <h1 className={styles.title}>東京都の図書館マップ</h1>
+        <p className={styles.note}>
+          ※ 喫煙区分は開発練習用の自動生成ダミーで、実際の施設とは関係ありません。
+        </p>
+      </header>
+
+      <main className={styles.mapArea}>
+        <MapArea onSettled={setView}>
+          <LibraryMarkers
+            items={items}
+            bbox={view?.bbox ?? null}
+            zoom={view?.zoom ?? 0}
+            selectedId={selected?.id ?? null}
+            onSelect={setSelected}
+          />
+          <MapControl position={ControlPosition.RIGHT_BOTTOM}>
+            <LocateControl />
+          </MapControl>
+        </MapArea>
+
+        <div className={styles.overlayLeft}>
+          <SmokingFilter value={smoking} onChange={setSmoking} />
+        </div>
+
+        <div className={styles.overlayTop}>
+          {zoomTooLow && <Toast>地図を拡大してください（この範囲では検索しません）</Toast>}
+          {!zoomTooLow && isError && (
+            <Toast tone="error">
+              データを取得できませんでした。
+              <button type="button" className={styles.retry} onClick={() => refetch()}>
+                再試行
+              </button>
+            </Toast>
+          )}
+          {!zoomTooLow && !isError && data?.truncated && (
+            <Toast>表示件数の上限に達しています。地図を拡大してください。</Toast>
+          )}
+          {!zoomTooLow && !isError && data && !data.truncated && data.count === 0 && (
+            <Toast>この範囲に図書館はありません。</Toast>
+          )}
+        </div>
+
+        {selected && (
+          <div className={styles.overlayPanel}>
+            <LibraryPanel item={selected} onClose={() => setSelected(null)} />
+          </div>
+        )}
+
+        {isFetching && <span className={styles.spinner} aria-label="読み込み中" />}
+      </main>
+
+      <footer className={styles.footer}>
+        <span className={styles.status}>
+          {zoomTooLow
+            ? `zoom ${view?.zoom.toFixed(1)} · 検索は zoom ${MIN_FETCH_ZOOM} 以上`
+            : `${items.length} 件表示中${data?.truncated ? '（上限）' : ''}`}
+        </span>
+        {/* OpenStreetMap（ODbL）は表示義務がある。Google 側のロゴは地図に自動で出る。 */}
+        <span className={styles.attribution}>
+          データ: ©{' '}
+          <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noreferrer">
+            OpenStreetMap contributors
+          </a>{' '}
+          (ODbL)
+        </span>
+      </footer>
+    </div>
+  )
+}
+
+/**
+ * `APIProvider` を地図のある画面だけに置く。
+ * マウントした時点で Maps JS の読み込みが始まるので、地図が無い画面
+ * （ログイン等）にまで巻くと無駄な map load を呼ぶ（docs/07-frontend.md）。
+ */
+function MapArea({
+  onSettled,
+  children,
+}: {
+  onSettled: (view: MapViewState) => void
+  children: React.ReactNode
+}) {
+  if (!env.mapEnabled) {
+    return <MapPlaceholder title="地図は無効化されています" detail="VITE_MAP_ENABLED=0" />
+  }
+  if (!env.googleMapsApiKey) {
+    return (
+      <MapPlaceholder
+        title="地図を読み込めません"
+        detail="VITE_GOOGLE_MAPS_API_KEY が未設定です（.env を確認）"
+      />
+    )
+  }
+
+  return (
+    // language / region を固定する。既定はブラウザの言語に追従するので、
+    // 韓国語ブラウザだと東京の地図にハングルのラベルが出る。
+    <APIProvider apiKey={env.googleMapsApiKey} language="ja" region="JP">
+      <MapView onSettled={onSettled}>{children}</MapView>
+    </APIProvider>
+  )
+}
+
+function Toast({ children, tone }: { children: React.ReactNode; tone?: 'error' }) {
+  return (
+    <p className={styles.toast} data-tone={tone}>
+      {children}
+    </p>
+  )
+}
