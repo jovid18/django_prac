@@ -25,16 +25,18 @@
 
 | 領域 | 選定 | 理由 |
 |---|---|---|
-| フロント | **React 19 + Vite + TypeScript** | CRA（`create-react-app`）は使用しない。Vite で生成する |
-| バックエンド | **Django 5.2 LTS + Django REST Framework** | 練習の対象 |
-| DB | **PostgreSQL 16 以降** | ローカルはコンテナ、デプロイは Render Postgres |
+| フロント | **React 19.2 + Vite 8 + TypeScript** | CRA（`create-react-app`）は使用しない。Vite で生成する |
+| バックエンド | **Django 6.0 + DRF 3.17**（Python 3.13） | 練習の対象。LTS ではなく最新を採る理由は `00-decisions.md` |
+| DB | **PostgreSQL 16** | ローカルはコンテナ、デプロイは Render Postgres |
+| Python 依存管理 | **uv**（`uv.lock` を commit） | ロックファイルで CI と本番のバージョンを揃える |
 | 地図 | **MapLibre GL JS + 国土地理院（GSI）ラスタタイル** | API キーもクレジットカード登録も不要。東京の精度が高く、出典表示だけで無料 |
 | 認証 | **メール + パスワード（JWT）と Google OAuth（ID トークン検証）** | LINE は[スコープ外](#スコープ外wont)として記録のみ |
 | ローカル | **docker compose**（db / api / web の 3 サービス） | |
 | デプロイ | **Render.com** — Static Site（フロント）+ Web Service（API）+ Postgres | |
 | CI/CD | **GitHub Actions** — テスト通過後に Render の Deploy Hook を叩く | |
 
-> **バージョン表記の注意**: 上記のメジャーバージョンは本ドキュメント作成時点のもの。実際の `Day 0` に各公式サイトで最新の安定版を確認し、`pyproject.toml` / `package.json` に確定させること。特に Django は **LTS（5.2）にするか最新にするか**を先に決める。
+> **バージョンは Day 0（2026-08-03）に調査して確定済み。** 根拠とリスクは **[`00-decisions.md`](00-decisions.md)** にまとめてある。
+> `djangorestframework-simplejwt` の Django 6.0 対応は PyPI のメタデータ上は未記載だが、**upstream で対応済み**であることを確認済み（`00-decisions.md`）。
 
 ## 機能スコープ
 

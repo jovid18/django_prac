@@ -75,21 +75,23 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: actions/setup-python@v5
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
         with:
-          python-version: "3.13"
-          cache: pip
+          enable-cache: true
+          cache-dependency-glob: backend/uv.lock
 
-      - run: pip install -e ".[dev]"
+      - name: Install dependencies
+        run: uv sync --frozen        # ← ロック通りに入れる。ローカルと同じ構成を保証
 
       - name: Lint
-        run: ruff check . && ruff format --check .
+        run: uv run ruff check . && uv run ruff format --check .
 
       - name: Migrations are up to date
-        run: python manage.py makemigrations --check --dry-run
+        run: uv run python manage.py makemigrations --check --dry-run
 
       - name: Test
-        run: pytest -q
+        run: uv run pytest -q
 
   frontend:
     runs-on: ubuntu-latest

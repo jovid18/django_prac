@@ -65,8 +65,11 @@ REFRESH_COOKIE = dict(httponly=True, secure=True,  samesite="None", path="/api/a
 
 ### Google Cloud Console 側の設定（Day 0 に済ませる）
 
-1. プロジェクトを作る
-2. 「API とサービス」→「OAuth 同意画面」→ 外部 / テストで作成、テストユーザーに自分のメールを追加
+1. プロジェクトを作る（**個人の Google アカウント配下で作る**。会社の Workspace 組織の下に作らない）
+2. 「API とサービス」→「OAuth 同意画面」（新しいコンソールでは「Google Auth Platform」→ Branding / Audience / Clients）
+   - **User Type は「外部（External）」**
+   - 公開ステータスは「テスト」のまま。テストユーザーに自分のメールを追加
+   - スコープは既定の `email` / `profile` / `openid` のみ。追加しない
 3. 「認証情報」→「OAuth 2.0 クライアント ID」→ **ウェブアプリケーション**
 4. **承認済みの JavaScript 生成元** に登録する:
    - `http://localhost:5173`
@@ -75,6 +78,20 @@ REFRESH_COOKIE = dict(httponly=True, secure=True,  samesite="None", path="/api/a
 6. 発行された **クライアント ID** を控える。**クライアントシークレットは使わない**
 
 > **フロントの Render URL は最初のデプロイをするまで分からない。** Day 0 では `localhost` だけ登録して進め、`08-deploy-render.md` の初回デプロイ後にここへ戻ってきて追加する。**この戻り忘れが「本番だけ Google ログインが動かない」の最頻出原因。**
+
+### 「内部」ではなく「外部」を選ぶ理由
+
+| | 内部（Internal） | 外部（External） |
+|---|---|---|
+| 前提 | **Google Workspace 組織が必要** | 誰でも |
+| ログインできる人 | **その組織のアカウントのみ** | すべての Google アカウント |
+| 審査 | 不要 | テストモードなら不要 |
+
+内部にするとログインがその組織のアカウントに限定される。個人の練習プロジェクトなので**外部**を選ぶ。
+
+**「テスト」モードのままだと、テストユーザーに登録したメールアドレスしかログインできない。** 誰かに見せる段階になったら「本番環境に公開」に切り替える。**今回は機微でない基本スコープ（`email` / `profile` / `openid`）しか使わないため、アプリ審査を通さずに公開できる。**
+
+> 参考: テストモードでは Google の refresh token が 7 日で失効するが、**本構成では Google の refresh token を保存しない**（ログイン時に ID トークンを 1 回検証するだけで、以降はアプリ自前の JWT）。したがってこの制限の影響を受けない。
 
 ### なぜリダイレクト URI もシークレットも要らないのか
 

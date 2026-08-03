@@ -8,14 +8,20 @@
 
 ## Day 0 — 準備（コードを書く前）
 
-- [ ] Django のバージョンを決める（LTS 5.2 か最新か）。`pyproject.toml` に固定する
-- [ ] 依存管理を決める（`pip` + `pyproject.toml` か `uv`）。**途中で変えない**
-- [ ] Google Cloud Console で OAuth クライアント ID を作る（`06-auth.md`）
+**結論は [`00-decisions.md`](00-decisions.md) にまとめてある。**
+
+- [x] Django のバージョンを決める → **6.0**（LTS の 5.2 ではなく最新。理由は `00-decisions.md`）
+- [x] 依存管理を決める → **uv**（`uv.lock` を commit）
+- [x] フロントのバージョンを決める → **React 19.2 / Vite 8 / Node 22 LTS**
+- [x] **無料 Postgres の条件を確認** → 30 日で失効 + 14 日猶予 / 1 GB / アカウントに 1 個 / バックアップ無し
+- [x] GitHub にリポジトリを push する
+- [ ] **Google Cloud Console で OAuth クライアント ID を作る** ← 手作業（`06-auth.md`）
       - 承認済み JavaScript 生成元に `http://localhost:5173` を登録
       - **本番 URL はまだ分からないので後で追加する**（Day 1 の宿題としてメモ）
-- [ ] GitHub にリポジトリを push する
-- [ ] Render のアカウントを作る
-- [ ] **無料 Postgres の有効期限を公式ドキュメントで確認し、期限日をカレンダーに入れる**
+- [ ] **Render のアカウントを作る** ← 手作業。GitHub アカウントで sign up してリポジトリへのアクセスを許可する
+
+> **リスクは調査済み**: `djangorestframework-simplejwt` の Django 6.0 対応は upstream の master にマージ済み（アプリコードの変更は 0 行）で、依存指定にも上限がない。**PyPI の 5.5.1 をそのまま使ってよい。**
+> ただし推論なので、Day 1 に 5 分だけ実測する（`00-decisions.md`）。
 
 ## Day 1 — 骨組みとデプロイの貫通
 
@@ -23,6 +29,7 @@
 
 ### backend
 
+- [ ] **★ 最優先: simplejwt × Django 6.0 の動作検証**（`00-decisions.md`）。駄目なら PyJWT 自前実装に切り替える
 - [ ] `backend/` に Django プロジェクトを作る（`config` 名で）
 - [ ] `config/settings/{base,local,production}.py` に分割
 - [ ] **`apps/accounts` を作り、カスタム `User` を定義する（`migrate` の前に！）**

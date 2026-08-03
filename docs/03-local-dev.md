@@ -79,24 +79,32 @@ volumes:
 
 ## `backend/Dockerfile`（ローカルとデプロイで共用）
 
+依存管理は **uv** に確定している（`00-decisions.md`）。
+
 ```dockerfile
 FROM python:3.13-slim
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
-    PYTHONUNBUFFERED=1
+    PYTHONUNBUFFERED=1 \
+    UV_COMPILE_BYTECODE=1 \
+    UV_LINK_MODE=copy \
+    PATH="/app/.venv/bin:$PATH"
 
 WORKDIR /app
 
+# uv 本体を公式イメージからコピーする（pip 経由より速く、バージョンも固定できる）
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
+
 # psycopg[binary] を使うのでビルドツールは基本不要。
 # ソースビルド版の psycopg に切り替える場合は libpq-dev / gcc をここで入れる。
-RUN apt-get update && apt-get install -y --no-install-recommends \
-        curl \
-    && rm -rf /var/lib/apt/lists/*
 
-COPY pyproject.toml ./
-RUN pip install --no-cache-dir -e .
+# ★ 依存だけ先にインストールする（レイヤキャッシュを効かせるため）。
+#    ソースを変えただけのときに依存の再インストールが走らない。
+COPY pyproject.toml uv.lock ./
+RUN uv sync --frozen --no-install-project --no-dev
 
 COPY . .
+RUN uv sync --frozen --no-dev
 
 EXPOSE 8000
 
@@ -104,7 +112,14 @@ EXPOSE 8000
 CMD ["gunicorn", "config.wsgi:application", "--bind", "0.0.0.0:8000", "--workers", "2"]
 ```
 
-> 依存管理を `uv` にする場合は `pip install` の代わりに `uv sync --frozen` を使い、`uv.lock` を commit する。どちらでもよいが **Day 0 で決めて途中で変えない**こと。
+| 記述 | 意図 |
+|---|---|
+| `COPY pyproject.toml uv.lock` を先に | **依存のインストールを独立したレイヤにする。** ソースを 1 行直すたびに全依存を入れ直すのを防ぐ |
+| `--frozen` | `uv.lock` の通りに入れる。ロックを勝手に更新させない（`npm ci` に相当） |
+| `--no-dev` | 本番イメージに `pytest` / `ruff` を含めない |
+| `PATH` に `.venv/bin` | `uv run` を毎回書かずに `gunicorn` を直接叩けるようにする |
+
+> **`uv.lock` は必ず commit する。** これが無いと `--frozen` が失敗し、ビルドが通らない。
 
 ## `frontend/Dockerfile.dev`
 
@@ -191,6 +206,10 @@ docker compose exec api python manage.py migrate
 docker compose exec api python manage.py shell
 docker compose exec api pytest
 docker compose exec api ruff check .
+
+# 依存を追加する（uv.lock が更新されるので commit する）
+docker compose exec api uv add <package>
+docker compose exec api uv add --dev <package>   # pytest / ruff など
 
 docker compose exec web npm run lint
 docker compose exec web npm run build  # ビルドが通るかの確認

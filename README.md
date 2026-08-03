@@ -5,17 +5,20 @@
 地図上に東京都の図書館を表示し、会員登録・ログイン（メール+パスワード / Google）ができるウェブアプリを作る。
 本来のテーマ（屋内で喫煙できる店のマッチング / [smocking-notes](https://github.com/jovid18/smocking-notes)）のデータドメインを図書館に差し替えたもの。
 
-> **現在の状態: 設計ドキュメントのみ。実装は未着手。**
+> **現在の状態: Day 0 完了（設計と技術選定）。実装は未着手。**
 
 ## 技術構成
 
+バージョンは Day 0（2026-08-03）に確定済み。根拠は [`docs/00-decisions.md`](docs/00-decisions.md)。
+
 | 領域 | 選定 |
 |---|---|
-| フロント | React 19 + Vite + TypeScript |
-| バックエンド | Django 5.2 LTS + Django REST Framework |
+| フロント | React 19.2 + Vite 8 + TypeScript（Node 22 LTS） |
+| バックエンド | Django 6.0 + DRF 3.17（Python 3.13） |
+| Python 依存管理 | uv（`uv.lock`） |
 | DB | PostgreSQL 16 |
 | 地図 | MapLibre GL JS + 国土地理院タイル |
-| 認証 | JWT（SimpleJWT）+ Google ID トークン検証 |
+| 認証 | JWT + Google ID トークン検証 |
 | ローカル | docker compose（db / api / web） |
 | デプロイ | Render.com（Static Site + Web Service + Postgres） |
 | CI/CD | GitHub Actions → Render Deploy Hook |
@@ -24,6 +27,7 @@
 
 | # | ファイル | 内容 |
 |---|---|---|
+| 00 | [Day 0 の決定事項](docs/00-decisions.md) | **確定バージョンと根拠、未解決リスク** |
 | 01 | [概要とスコープ](docs/01-overview.md) | 何を作るか、Must / Won't |
 | 02 | [アーキテクチャ](docs/02-architecture.md) | 全体構成、**ローカルと本番の差分表**、ディレクトリ構造 |
 | 03 | [ローカル開発環境](docs/03-local-dev.md) | docker compose、初回セットアップ、トラブルシュート |
