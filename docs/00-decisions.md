@@ -283,7 +283,7 @@ Render には[公式の Terraform プロバイダ](https://render.com/docs/terra
 | 項目 | 状態 |
 |---|---|
 | 独自ドメイン | **買わない**（`08-deploy-render.md` に理由） |
-| 独自の地図スタイル（Map ID） | 後回し。まず `DEMO_MAP_ID` で進め、配色を触りたくなったら Cloud Console で作る |
+| 独自の地図スタイル（Map ID） | **作らない（`DEMO_MAP_ID` のまま）。** POI を整理できる利点はあるが、**クラウドのカスタムスタイルは light の色スキームでしか使えない**。ライトとダークの両対応にするには **Map ID を 2 つ**作って差し替える必要があり（ダークは別のベースマップなのでスタイルを兼用できない）、`colorScheme` は初期化時のみ有効なので**切り替えごとに +1 map load** になる。→ **今は `colorScheme="FOLLOW_SYSTEM"` で無料で得ているダークモードのほうを取る。** 地図の POI がうるさいと感じたら再検討する |
 | Terraform | **使わない**（上記） |
 | Render のリージョン | Blueprint に `singapore` と書いているが、作成時に選択肢を確認する |
 | E2E テスト（Playwright） | Should。Day 5 に余裕があれば |
