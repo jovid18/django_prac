@@ -1,0 +1,233 @@
+# 06. 認証設計（メール+パスワード / Google）
+
+## 方針の要約
+
+- **トークンは自前で発行する。** Google はあくまで「本人確認の手段」であって、Google のトークンをそのままアプリの認証に使わない。ID/PW でも Google でも、最終的にアプリが発行した JWT に合流する。
+- **アクセストークン（短命 15 分）はメモリに、リフレッシュトークン（長命 14 日）は HttpOnly Cookie に。**
+- **`django-allauth` は使わない。** 高機能だが、テンプレート前提の設計を SPA に噛ませると設定の学習コストが本題を上回る。`google-auth` で ID トークンを検証する数十行のほうが、何が起きているか見える。
+
+## 全体フロー
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant B as ブラウザ
+    participant G as Google
+    participant A as Django API
+
+    Note over B,A: ① メール + パスワード
+    B->>A: POST /api/auth/login/ {email, password}
+    A->>A: authenticate()
+    A-->>B: {access} + Set-Cookie: refresh_token (HttpOnly)
+
+    Note over B,A: ② Google
+    B->>G: Google Identity Services でサインイン
+    G-->>B: ID トークン（JWT、Google 署名）
+    B->>A: POST /api/auth/google/ {id_token}
+    A->>G: 公開鍵を取得（google-auth がキャッシュ）
+    A->>A: 署名・aud・iss・exp を検証 → User を特定 or 作成
+    A-->>B: {access} + Set-Cookie: refresh_token
+
+    Note over B,A: ③ アクセストークンが切れたら
+    B->>A: POST /api/auth/refresh/ (Cookie 自動送信)
+    A-->>B: {access}
+```
+
+## トークンの持ち方
+
+| トークン | 保管場所 | 寿命 | 理由 |
+|---|---|---|---|
+| access | **JS のメモリ変数**（`localStorage` に置かない） | 15 分 | XSS で盗まれても被害が 15 分で切れる。リロードで消えるが、直後に refresh すれば復帰できる |
+| refresh | **HttpOnly Cookie**（`Secure` / `SameSite=None` / `Path=/api/auth`） | 14 日 | JS から読めないので XSS で持ち出せない |
+
+### なぜ `localStorage` にしないのか
+
+`localStorage` は同一オリジンの JS から全部読める。依存ライブラリ 1 つが汚染されるだけでリフレッシュトークンが抜かれ、14 日間なりすませる。HttpOnly Cookie なら JS からは触れない。
+
+**代わりに CSRF を考える必要が出る。** Cookie が自動送信される以上、`/api/auth/refresh/` は攻撃者のサイトからも叩けてしまう。ただし:
+
+- レスポンスを読むにはクロスオリジンの制約を越える必要があり、`CORS_ALLOWED_ORIGINS` に載っていないオリジンからは**レスポンスを読めない**。
+- Cookie の `Path=/api/auth` で送信先を絞る。
+- それでも心配なら、refresh のレスポンスに CSRF トークンを載せてダブルサブミットする。**今回は CORS のオリジン制限までで止める**（練習の範囲として妥当）。
+
+### Cookie の設定値
+
+```python
+# ローカル
+REFRESH_COOKIE = dict(httponly=True, secure=False, samesite="Lax",  path="/api/auth")
+# 本番（フロントと API が別ホストなので None が必須）
+REFRESH_COOKIE = dict(httponly=True, secure=True,  samesite="None", path="/api/auth")
+```
+
+> **`SameSite=None` は `Secure` とセットでないとブラウザに捨てられる。** HTTPS でないと動かないので、ローカルでは `Lax` にする。この分岐を忘れると「ローカルではログイン維持されるのに、デプロイすると毎回ログアウトされる」になる。`02-architecture.md` の差分表の 1 行。
+
+## Google ログインの実装
+
+### Google Cloud Console 側の設定（Day 0 に済ませる）
+
+1. プロジェクトを作る
+2. 「API とサービス」→「OAuth 同意画面」→ 外部 / テストで作成、テストユーザーに自分のメールを追加
+3. 「認証情報」→「OAuth 2.0 クライアント ID」→ **ウェブアプリケーション**
+4. **承認済みの JavaScript 生成元** に登録する:
+   - `http://localhost:5173`
+   - `https://<フロントの Render URL>`
+5. **承認済みのリダイレクト URI は今回は不要**（後述の理由）
+6. 発行された **クライアント ID** を控える。**クライアントシークレットは使わない**
+
+> **フロントの Render URL は最初のデプロイをするまで分からない。** Day 0 では `localhost` だけ登録して進め、`08-deploy-render.md` の初回デプロイ後にここへ戻ってきて追加する。**この戻り忘れが「本番だけ Google ログインが動かない」の最頻出原因。**
+
+### なぜリダイレクト URI もシークレットも要らないのか
+
+OAuth には大きく 2 つの流れがある。
+
+| 方式 | 流れ | シークレット |
+|---|---|---|
+| Authorization Code フロー | ブラウザを Google にリダイレクト → コードを持って戻る → **サーバが**シークレット付きでトークンに交換 | 必要 |
+| **ID トークン方式（今回）** | ブラウザ上で Google のライブラリがサインインを完結させ、**ID トークン（JWT）を直接返す**。それをサーバに渡して検証するだけ | 不要 |
+
+SPA では後者が素直で、リダイレクトによる画面遷移も起きない。サーバがやることは「受け取った JWT が本当に Google の署名で、自分宛てで、期限内か」を確かめるだけ。
+
+### フロント側
+
+```html
+<!-- index.html -->
+<script src="https://accounts.google.com/gsi/client" async defer></script>
+```
+
+```ts
+// 概念スケッチ
+google.accounts.id.initialize({
+  client_id: import.meta.env.VITE_GOOGLE_OAUTH_CLIENT_ID,
+  callback: async (response) => {
+    // response.credential が ID トークン
+    const r = await api.post("/api/auth/google/", { id_token: response.credential });
+    setAccessToken(r.access);
+    setUser(r.user);
+  },
+});
+google.accounts.id.renderButton(buttonRef.current, { theme: "outline", size: "large" });
+```
+
+### サーバ側の検証
+
+```python
+from google.oauth2 import id_token
+from google.auth.transport import requests as google_requests
+
+def verify(raw_token: str) -> dict:
+    # 署名・exp・iss を検証し、aud が自分の client_id と一致することも確認する
+    info = id_token.verify_oauth2_token(
+        raw_token,
+        google_requests.Request(),
+        settings.GOOGLE_OAUTH_CLIENT_ID,   # ← aud のチェック。ここを渡さないと意味がない
+    )
+    if info["iss"] not in ("accounts.google.com", "https://accounts.google.com"):
+        raise ValidationError("invalid issuer")
+    if not info.get("email_verified"):
+        raise ValidationError("email not verified")
+    return info   # sub / email / name / picture など
+```
+
+**検証で必ず確認する 4 点**
+
+| 項目 | 何を防ぐか |
+|---|---|
+| 署名（Google の公開鍵） | 偽造トークン |
+| `aud` == 自分の client_id | **他のアプリ向けに発行されたトークンの使い回し**。ここが一番忘れられやすい |
+| `iss` == `accounts.google.com` | 発行元のなりすまし |
+| `exp` | 期限切れトークンの再利用 |
+
+`verify_oauth2_token` は署名・`exp`・`aud` をまとめて見てくれる。`iss` と `email_verified` は自分で足す。
+
+### ユーザーの特定 / 作成ロジック
+
+```
+info = verify(id_token)
+sub, email = info["sub"], info["email"]
+
+1. SocialAccount(provider="google", provider_uid=sub) があれば → その User でログイン
+2. 無ければ、User(email=email) を探す
+   2-a. 見つかった → 既存 User に SocialAccount を紐付けてログイン（created=False）
+   2-b. 無い → User を新規作成（set_unusable_password）+ SocialAccount 作成（created=True）
+```
+
+**`sub` を主キー扱いにして `email` は補助にする。** Google のメールアドレスは変更されうるが `sub` は不変。`email` だけで突き合わせる実装にすると、ユーザーがメールを変えた瞬間に別アカウントが生えてしまう。
+
+**2-a のアカウント自動紐付けについて。** 「同じメールなら同一人物」と見なして自動でリンクしている。これは `email_verified: true` を確認しているから成立する（Google が本人のメールだと保証している）。**検証していないメールでこれをやると、他人のアカウントを乗っ取れる典型的な脆弱性になる。** だから上のコードで `email_verified` を必ず見る。
+
+## SimpleJWT の設定
+
+```python
+SIMPLE_JWT = {
+    "ACCESS_TOKEN_LIFETIME": timedelta(minutes=15),
+    "REFRESH_TOKEN_LIFETIME": timedelta(days=14),
+    "ROTATE_REFRESH_TOKENS": True,        # refresh のたびに新しい refresh を発行
+    "BLACKLIST_AFTER_ROTATION": True,     # 古い refresh を無効化
+    "UPDATE_LAST_LOGIN": True,
+    "AUTH_HEADER_TYPES": ("Bearer",),
+    "USER_ID_FIELD": "id",
+}
+```
+
+- `rest_framework_simplejwt.token_blacklist` を `INSTALLED_APPS` に入れる（ログアウトとローテーションに必要。テーブルが 2 つ増える）。
+- **`refresh` の応答で Cookie を差し替える。** ローテーションを有効にした以上、新しい refresh を Cookie に書き戻さないと 2 回目の refresh が失敗する。
+- SimpleJWT の標準ビューはトークンを body で受け渡す前提なので、**Cookie から読んで Cookie に書くカスタムビューを自分で書く**（20 行程度）。ここが今回の認証実装で一番手を動かす箇所。
+
+## CORS の設定
+
+```python
+# production.py
+CORS_ALLOWED_ORIGINS = [os.environ["FRONTEND_ORIGIN"]]   # https://xxx.onrender.com
+CORS_ALLOW_CREDENTIALS = True                            # Cookie を送るために必須
+CSRF_TRUSTED_ORIGINS = [os.environ["FRONTEND_ORIGIN"]]
+```
+
+```python
+# local.py
+CORS_ALLOWED_ORIGINS = ["http://localhost:5173"]
+CORS_ALLOW_CREDENTIALS = True
+```
+
+- **`CORS_ALLOW_ALL_ORIGINS = True` は使わない。** `CORS_ALLOW_CREDENTIALS = True` と併用するとブラウザが拒否する（仕様上、ワイルドカードと認証情報は共存できない）ので、そもそも動かない。
+- `corsheaders.middleware.CorsMiddleware` は **`CommonMiddleware` より前**に置く。順番を間違えるとプリフライトが 404 になる。
+
+## フロント側のトークン更新
+
+```ts
+// api/client.ts の概念
+let accessToken: string | null = null;
+
+async function request(path: string, init: RequestInit = {}) {
+  const res = await fetch(BASE + path, {
+    ...init,
+    credentials: "include",                       // Cookie を送る
+    headers: { ...init.headers, ...(accessToken && { Authorization: `Bearer ${accessToken}` }) },
+  });
+
+  if (res.status !== 401) return res;
+
+  // 401 → 一度だけ refresh を試す
+  const ok = await refreshOnce();                 // 同時多発 401 を 1 回にまとめる（下記）
+  if (!ok) { redirectToLogin(); throw new Error("unauthenticated"); }
+
+  return fetch(BASE + path, { /* 同じ内容を再送 */ });
+}
+```
+
+**注意点**
+
+- **リトライは 1 回だけ。** refresh も 401 なら諦めてログイン画面へ。ここでループさせると無限リクエストになる。
+- **同時に複数のリクエストが 401 になったとき、refresh を 1 回にまとめる。** 進行中の refresh の Promise を保持して共有する。これをやらないと refresh がローテーションと競合して、正しいトークンが無効化される。
+- **アプリ起動時に一度 `refresh` を叩く。** access はメモリなのでリロードで消える。起動時に refresh して復帰させれば「リロードすると毎回ログアウトされる」を防げる。成功するまでの間はローディングを出す。
+
+## セキュリティ上、今回やらないこと（意識的に）
+
+| 項目 | 判断 |
+|---|---|
+| メールアドレスの確認（確認メール） | SMTP 設定が本題から外れる。登録直後から使える |
+| パスワード再設定 | 同上 |
+| 2 要素認証 | スコープ外 |
+| refresh の CSRF ダブルサブミット | CORS のオリジン制限で止める |
+| ログイン試行のアカウントロック | DRF のスロットリング（IP ベース）まで |
+
+**これらは「知らなかった」ではなく「今回はやらないと決めた」もの。** 実サービスに転用するときは、この表を上から潰していく。
