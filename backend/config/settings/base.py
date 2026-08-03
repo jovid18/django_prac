@@ -127,8 +127,13 @@ SIMPLE_JWT = {
 }
 
 # リフレッシュトークンを載せる Cookie。secure / samesite は環境ごとに上書きする。
+# Path を絞ってあるので、この Cookie は /api/auth/* にしか送られない
+# （config/urls.py のマウント位置と対応させること）。
 REFRESH_COOKIE_NAME = "refresh_token"
 REFRESH_COOKIE_PATH = "/api/auth"
+# 既定は厳しい側にしておく。HTTP でしか動かないローカルだけ local.py で緩める。
+REFRESH_COOKIE_SECURE = True
+REFRESH_COOKIE_SAMESITE = "None"
 
 
 # --- 国際化 ---------------------------------------------------------------

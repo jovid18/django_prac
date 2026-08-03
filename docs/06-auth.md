@@ -237,6 +237,46 @@ async function request(path: string, init: RequestInit = {}) {
 - **同時に複数のリクエストが 401 になったとき、refresh を 1 回にまとめる。** 進行中の refresh の Promise を保持して共有する。これをやらないと refresh がローテーションと競合して、正しいトークンが無効化される。
 - **アプリ起動時に一度 `refresh` を叩く。** access はメモリなのでリロードで消える。起動時に refresh して復帰させれば「リロードすると毎回ログアウトされる」を防げる。成功するまでの間はローディングを出す。
 
+## 実装して分かったこと（Day 4 / 2026-08-03）
+
+設計どおりに動いたが、**設計に書いていなかった落とし穴**が 5 つあった。
+
+| 症状 | 原因 | 対処 |
+|---|---|---|
+| `google.auth.transport.requests` が `ModuleNotFoundError: requests` | **素の `google-auth` は HTTP クライアントを同梱していない。** 公開鍵の取得に使うトランスポートが extra に分かれている | `pyproject.toml` を **`google-auth[requests]`** にする。`uv.lock` も更新して commit |
+| ログイン失敗が **401 ではなく 403** で返る | DRF の `APIView.handle_exception` は、`authentication_classes` が空のビューで `AuthenticationFailed` を受けると **403 に書き換える**（`WWW-Authenticate` ヘッダを組み立てられないため） | `status_code = 401` の `APIException` を自分で定義して投げる（`apps/accounts/exceptions.py`）。ログイン系は「期限切れの Authorization ヘッダに邪魔されない」よう意図して認証を外しているので、認証クラスを足して回避する道は採らない |
+| `last_login` が更新されない | `SIMPLE_JWT["UPDATE_LAST_LOGIN"]` は **SimpleJWT 自身のシリアライザ**（`TokenObtainPairSerializer`）にしか効かない。`RefreshToken.for_user()` を直接呼ぶ実装では発火しない | ログイン成功時に `update_last_login(None, user)` を自分で呼ぶ |
+| ログアウトしても本番だけ Cookie が残る（可能性） | `delete_cookie` に `samesite` を渡さないと、削除用の `Set-Cookie` に `Secure` が付かない。**`SameSite=None` かつ Secure 無しの Cookie はブラウザに捨てられる** | set と delete を同じ関数群（`apps/accounts/cookies.py`）に閉じ、`path` と `samesite` を必ず揃える |
+| 大文字違いのメールで二重登録できてしまう | `unique=True` は大文字小文字を区別する。`Taro@` と `taro@` が別レコードとして通る | シリアライザで `email__iexact` を見て 400 にする（DB の `IntegrityError` = 500 にしない） |
+
+### 本番で必ず確認すること（クロスサイト Cookie）
+
+フロント（`xxx.onrender.com`）と API（`yyy.onrender.com`）は**別サイト**扱いになる
+（`onrender.com` は Public Suffix List に載っているため、サブドメインどうしでも same-site にならない）。
+つまりリフレッシュ Cookie は **third-party cookie** として扱われる。
+
+- Chrome: `SameSite=None; Secure` で送られる。
+- **Safari / ブラウザの「サードパーティ Cookie をブロック」設定では送られない。**
+  → 「Chrome ではリロードでログインが維持されるのに、Safari では毎回ログアウトされる」になる。
+
+**根本的な回避策は「API をフロントと同じサイトに置く」しかない**
+（独自ドメインを取って `app.example.com` と `api.example.com` にする）。
+今回は独自ドメインを使わないので、**この制限を受け入れる**。
+`docs/10-roadmap.md` の動作確認シナリオは Chrome で通す前提。
+
+### テストで気をつけたこと
+
+- **DRF のスロットリングは cache にカウントを持つ。** cache はテスト間で共有されるので、
+  クリアしないと「login を何度も叩くテストのせいで後続が 429」になる。
+  落ち方が実行順に依存するので原因が分かりにくい。`conftest.py` に autouse の
+  `cache.clear()` を置いた。
+- **Django のテストクライアントは Cookie の `Path` を無視して全部送る。**
+  `Path=/api/auth` が効いているかはテストでは検証できない。ブラウザで確認する。
+- Google の署名検証は `google-auth` の責務なので、`verify_oauth2_token` を差し替えて
+  **「検証を通った後の分岐」だけ**をテストする。差し替え関数の中で
+  `audience == client_id` を assert しておくと、`aud` チェックの引数を
+  渡し忘れる回帰を捕まえられる。
+
 ## セキュリティ上、今回やらないこと（意識的に）
 
 | 項目 | 判断 |

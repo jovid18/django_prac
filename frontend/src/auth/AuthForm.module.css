@@ -1,0 +1,121 @@
+.page {
+  display: grid;
+  place-items: center;
+  min-height: 100dvh;
+  padding: 24px 16px;
+}
+
+.card {
+  display: grid;
+  gap: 14px;
+  width: min(360px, 100%);
+  padding: 24px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--bg) 60%, white 40%);
+}
+
+@media (prefers-color-scheme: dark) {
+  .card {
+    background: color-mix(in srgb, var(--bg) 70%, white 6%);
+  }
+}
+
+.title {
+  margin: 0;
+  font-size: 18px;
+  letter-spacing: -0.01em;
+}
+
+.form {
+  display: grid;
+  gap: 12px;
+}
+
+.field {
+  display: grid;
+  gap: 4px;
+}
+
+.label {
+  font-size: 12px;
+  color: var(--sub);
+}
+
+.input {
+  width: 100%;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--bg);
+  color: var(--fg);
+  font: inherit;
+  font-size: 14px;
+}
+
+.input:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--fg) 45%, transparent);
+  outline-offset: 1px;
+}
+
+.hint {
+  margin: 0;
+  font-size: 11px;
+  color: var(--sub);
+}
+
+.error {
+  margin: 0;
+  font-size: 12px;
+  color: var(--ng);
+}
+
+.submit {
+  padding: 9px 12px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: var(--fg);
+  color: var(--bg);
+  font: inherit;
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.submit:disabled {
+  opacity: 0.6;
+  cursor: progress;
+}
+
+.divider {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  gap: 10px;
+  align-items: center;
+  font-size: 11px;
+  color: var(--sub);
+}
+
+.divider::before,
+.divider::after {
+  border-top: 1px solid var(--line);
+  content: '';
+}
+
+/* GSI は iframe を差し込む。読み込み前に高さを確保しないとレイアウトが跳ねる。 */
+.googleButton {
+  display: grid;
+  place-items: center;
+  min-height: 40px;
+}
+
+.links {
+  display: flex;
+  gap: 12px;
+  justify-content: space-between;
+  font-size: 12px;
+}
+
+.links a {
+  color: var(--sub);
+}
